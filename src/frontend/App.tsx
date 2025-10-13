@@ -1,20 +1,28 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { elizaClient } from './lib/elizaClient';
 import { socketManager } from './lib/socketManager';
-import Chat from './components/Chat.tsx';
+import { ChatInterface } from './components/chat/chat-interface';
+import SmallChat from './components/chat';
+import { SidebarProvider } from './components/ui/sidebar';
+import { DashboardSidebar } from './components/dashboard/sidebar';
+import Widget from './components/dashboard/widget';
+import Notifications from './components/dashboard/notifications';
+import { MobileChat } from './components/chat/mobile-chat';
+import { MobileHeader } from './components/dashboard/mobile-header';
+import mockDataJson from './mock.json';
+import type { MockData } from './types/dashboard';
 
+const mockData = mockDataJson as MockData;
 const DEFAULT_SERVER_ID = '00000000-0000-0000-0000-000000000000';
 
 // Generate a proper UUID for the user (required by server validation)
-// The server expects senderId/entityId to be a valid UUID format
 function getUserId(): string {
   const existingId = localStorage.getItem('eliza-user-id');
   if (existingId) {
     return existingId;
   }
   
-  // Generate a valid UUID using the same method as the official client
   const userId = crypto.randomUUID();
   localStorage.setItem('eliza-user-id', userId);
   return userId;
@@ -22,8 +30,20 @@ function getUserId(): string {
 
 const USER_ID = getUserId();
 
+interface Channel {
+  id: string;
+  name: string;
+  createdAt?: number;
+  lastMessageAt?: number;
+}
+
 function App() {
   const [connected, setConnected] = useState(false);
+  const [channels, setChannels] = useState<Channel[]>([]);
+  const [isLoadingChannels, setIsLoadingChannels] = useState(true);
+  const [isCreatingChannel, setIsCreatingChannel] = useState(false);
+  const [activeChannelId, setActiveChannelId] = useState<string | null>(null);
+  const hasInitialized = useRef(false);
 
   // Fetch the agent list first to get the ID
   const { data: agentsData } = useQuery({
@@ -32,7 +52,7 @@ function App() {
       const result = await elizaClient.agents.listAgents();
       return result.agents;
     },
-    refetchInterval: 10000, // Refetch every 10 seconds
+    refetchInterval: 10000,
   });
 
   const agentId = agentsData?.[0]?.id;
@@ -44,7 +64,7 @@ function App() {
       if (!agentId) return null;
       return await elizaClient.agents.getAgent(agentId);
     },
-    enabled: !!agentId, // Only fetch when we have an agent ID
+    enabled: !!agentId,
     refetchInterval: 10000,
   });
 
@@ -67,71 +87,282 @@ function App() {
     };
   }, []);
 
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
-      {/* Header */}
-      <header className="bg-white shadow-sm border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-3">
-              {agent?.settings?.avatar ? (
-                <img 
-                  src={agent.settings.avatar as string} 
-                  alt={agent.name}
-                  className="w-10 h-10 rounded-lg object-cover"
-                />
-              ) : (
-                <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-lg flex items-center justify-center">
-                  <span className="text-white text-xl font-bold">
-                    {agent?.name?.charAt(0).toUpperCase() || 'E'}
-                  </span>
-                </div>
-              )}
-              <div>
-                <h1 className="text-2xl font-bold text-gray-900">
-                  {agent?.name || 'Loading...'}
-                </h1>
-                <p className="text-sm text-gray-500">Powered by ElizaOS</p>
-              </div>
-            </div>
+  // Load channels
+  useEffect(() => {
+    async function loadChannels() {
+      if (!agent?.id || !USER_ID) return;
+
+      setIsLoadingChannels(true);
+      try {
+        console.log('📂 Loading all DM channels for agent:', agent.id);
+        console.log('👤 User ID:', USER_ID);
+        const response = await elizaClient.messaging.getServerChannels(DEFAULT_SERVER_ID as any);
+        console.log(`📊 Total channels from server: ${response.channels.length}`);
+        const dmChannels = await Promise.all(
+          response.channels
+            .filter((ch: any) => {
+              if (ch.type !== 'DM') return false;
+              
+              // Check participants in metadata
+              const participants = ch.metadata?.participantCentralUserIds;
+              if (participants && Array.isArray(participants)) {
+                return participants.includes(agent.id) && participants.includes(USER_ID);
+              }
+              
+              // Fallback: check if it's marked as a DM for this agent
+              const isForAgent = ch.metadata?.forAgent === agent.id || ch.metadata?.agentId === agent.id;
+              const isForUser = ch.metadata?.user1 === USER_ID || ch.metadata?.user2 === USER_ID;
+              
+              return isForAgent && isForUser;
+            })
+            .map(async (ch: any) => {
+              let createdAt = 0;
+              if (ch.createdAt instanceof Date) {
+                createdAt = ch.createdAt.getTime();
+              } else if (typeof ch.createdAt === 'number') {
+                createdAt = ch.createdAt;
+              } else if (typeof ch.createdAt === 'string') {
+                createdAt = Date.parse(ch.createdAt);
+              } else if (ch.metadata?.createdAt) {
+                // Try metadata.createdAt as fallback
+                if (typeof ch.metadata.createdAt === 'string') {
+                  createdAt = Date.parse(ch.metadata.createdAt);
+                } else if (typeof ch.metadata.createdAt === 'number') {
+                  createdAt = ch.metadata.createdAt;
+                }
+              }
+
+              let lastMessageAt = 0;
+              try {
+                const msgs = await elizaClient.messaging.getChannelMessages(ch.id, { limit: 1 });
+                if (msgs.messages.length > 0) {
+                  const msg = msgs.messages[0];
+                  if (msg.createdAt instanceof Date) {
+                    lastMessageAt = msg.createdAt.getTime();
+                  } else if (typeof msg.createdAt === 'number') {
+                    lastMessageAt = msg.createdAt;
+                  } else if (typeof msg.createdAt === 'string') {
+                    lastMessageAt = Date.parse(msg.createdAt);
+                  }
+                }
+              } catch (err) {
+                console.warn(`Could not load last message for channel ${ch.id}`);
+              }
+
+              return {
+                id: ch.id,
+                name: ch.name || `Chat ${ch.id.substring(0, 8)}`,
+                createdAt: createdAt || Date.now(),
+                lastMessageAt,
+              };
+            })
+        );
+
+        const sortedChannels = dmChannels.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+        setChannels(sortedChannels);
+        
+        console.log(`✅ Loaded ${sortedChannels.length} DM channels (sorted by creation time)`);
+        sortedChannels.forEach((ch, i) => {
+          const createdDate = ch.createdAt ? new Date(ch.createdAt).toLocaleString() : 'Unknown';
+          console.log(`  ${i + 1}. ${ch.name} (${ch.id.substring(0, 8)}...) - Created: ${createdDate}`);
+        });
+        
+        // If no channels exist, create one automatically
+        if (sortedChannels.length === 0 && !hasInitialized.current) {
+          console.log('📝 No channels found, creating default channel...');
+          hasInitialized.current = true;
+          
+          // Create default channel
+          const timestamp = new Date().toLocaleString('en-US', {
+            month: 'short',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+          });
+          const channelName = `Chat - ${timestamp}`;
+          const now = Date.now();
+          
+          try {
+            const newChannel = await elizaClient.messaging.createGroupChannel({
+              name: channelName,
+              participantIds: [USER_ID as any, agent.id as any],
+              metadata: {
+                type: 'DM',
+                isDm: true,
+                user1: USER_ID,
+                user2: agent.id,
+                forAgent: agent.id,
+                createdAt: new Date(now).toISOString(),
+              },
+            });
             
-            <div className="flex items-center space-x-2">
-              <div className={`w-2 h-2 rounded-full ${connected ? 'bg-green-500' : 'bg-red-500'}`}></div>
-              <span className="text-sm text-gray-600">
-                {connected ? 'Connected' : 'Disconnected'}
-              </span>
-            </div>
+            const newChannelData = {
+              id: newChannel.id,
+              name: newChannel.name,
+              createdAt: now,
+              lastMessageAt: 0,
+            };
+            
+            setChannels([newChannelData]);
+            setActiveChannelId(newChannel.id);
+            console.log('✅ Default channel created:', newChannel.id);
+          } catch (error: any) {
+            console.error('❌ Failed to create default channel:', error);
+          }
+        } else if (sortedChannels.length > 0 && !activeChannelId && !hasInitialized.current) {
+          // Set first channel as active if we have channels
+          setActiveChannelId(sortedChannels[0].id);
+          hasInitialized.current = true;
+        }
+      } catch (error: any) {
+        console.warn('⚠️ Could not load channels:', error.message);
+      } finally {
+        setIsLoadingChannels(false);
+      }
+    }
+
+    loadChannels();
+  }, [agent?.id, USER_ID]);
+
+  const handleNewChat = async () => {
+    if (isCreatingChannel || !agent?.id || !USER_ID) return;
+
+    setIsCreatingChannel(true);
+    try {
+      const timestamp = new Date().toLocaleString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+      });
+      const channelName = `Chat - ${timestamp}`;
+
+      const now = Date.now();
+      const newChannel = await elizaClient.messaging.createGroupChannel({
+        name: channelName,
+        participantIds: [USER_ID as any, agent.id as any],
+        metadata: {
+          type: 'DM',
+          isDm: true,
+          user1: USER_ID,
+          user2: agent.id,
+          forAgent: agent.id,
+          createdAt: new Date(now).toISOString(),
+        },
+      });
+
+      setChannels((prev) => [
+        {
+          id: newChannel.id,
+          name: newChannel.name,
+          createdAt: now,
+          lastMessageAt: 0,
+        },
+        ...prev,
+      ]);
+
+      setActiveChannelId(newChannel.id);
+    } catch (error: any) {
+      console.error('❌ Failed to create new chat:', error);
+    } finally {
+      setIsCreatingChannel(false);
+    }
+  };
+
+  const handleChannelSelect = async (newChannelId: string) => {
+    if (newChannelId === activeChannelId) return;
+
+    if (activeChannelId) {
+      socketManager.leaveChannel(activeChannelId);
+    }
+
+    setActiveChannelId(newChannelId);
+  };
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-muted flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
+          <p className="mt-4 text-muted-foreground uppercase tracking-wider text-sm font-mono">
+            Loading agent...
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!agent) {
+    return (
+      <div className="min-h-screen bg-muted flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-xl text-foreground font-mono uppercase tracking-wider">No agent available</p>
+          <p className="text-sm text-muted-foreground mt-2 font-mono">
+            Please start the server with an agent configured.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <SidebarProvider>
+      {/* Mobile Header */}
+      <MobileHeader mockData={mockData} />
+
+      {/* Desktop Layout - 3 columns */}
+      <div className="w-full grid grid-cols-1 lg:grid-cols-12 gap-gap lg:px-sides">
+        {/* Left Sidebar - Chat History */}
+        <div className="hidden lg:block col-span-2 top-0 relative">
+          <DashboardSidebar
+            channels={channels}
+            activeChannelId={activeChannelId}
+            onChannelSelect={handleChannelSelect}
+            onNewChat={handleNewChat}
+            isCreatingChannel={isCreatingChannel}
+            agentName={agent.name}
+            agentAvatar={agent.settings?.avatar as string | undefined}
+          />
+        </div>
+
+        {/* Center - Chat Interface */}
+        <div className="col-span-1 lg:col-span-7">
+          <div className="py-sides">
+            {isLoadingChannels || !activeChannelId ? (
+              <div className="flex items-center justify-center h-[calc(100vh-200px)]">
+                <div className="text-center">
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
+                  <p className="mt-4 text-muted-foreground uppercase tracking-wider text-sm font-mono">
+                    {isLoadingChannels ? 'Loading channels...' : 'Select a chat'}
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <ChatInterface
+                agent={agent}
+                userId={USER_ID}
+                serverId={DEFAULT_SERVER_ID}
+                channelId={activeChannelId}
+              />
+            )}
           </div>
         </div>
-      </header>
 
-      {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {isLoading ? (
-          <div className="flex items-center justify-center h-[calc(100vh-200px)]">
-            <div className="text-center">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto"></div>
-              <p className="mt-4 text-gray-600">Loading agent...</p>
-            </div>
+        {/* Right Sidebar - Widget, Notifications, Small Chat */}
+        <div className="col-span-3 hidden lg:block">
+          <div className="space-y-gap py-sides min-h-screen max-h-screen sticky top-0 overflow-clip">
+            <Widget widgetData={mockData.widgetData} />
+            <Notifications initialNotifications={mockData.notifications} />
+            <SmallChat />
           </div>
-        ) : agent ? (
-          <Chat
-            agent={agent}
-            userId={USER_ID}
-            serverId={DEFAULT_SERVER_ID}
-          />
-        ) : (
-          <div className="flex items-center justify-center h-[calc(100vh-200px)]">
-            <div className="text-center">
-              <p className="text-xl text-gray-600">No agent available</p>
-              <p className="text-sm text-gray-500 mt-2">Please start the server with an agent configured.</p>
-            </div>
-          </div>
-        )}
-      </main>
-    </div>
+        </div>
+      </div>
+
+      {/* Mobile Chat */}
+      <MobileChat />
+    </SidebarProvider>
   );
 }
 
 export default App;
-

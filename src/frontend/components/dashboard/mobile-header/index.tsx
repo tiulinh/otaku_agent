@@ -2,18 +2,17 @@ import * as React from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { SidebarTrigger } from "@/components/ui/sidebar";
-import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetTrigger, SheetClose, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import MonkeyIcon from "@/components/icons/monkey";
-import MobileNotifications from "@/components/dashboard/notifications/mobile-notifications";
+import { CDPWalletCard } from "@/components/dashboard/cdp-wallet-card";
 import type { MockData } from "@/types/dashboard";
-import BellIcon from "@/components/icons/bell";
+import { Wallet } from "lucide-react";
 
 interface MobileHeaderProps {
   mockData: MockData;
 }
 
 export function MobileHeader({ mockData }: MobileHeaderProps) {
-  const unreadCount = mockData.notifications.filter((n) => !n.read).length;
 
   return (
     <div className="lg:hidden h-header-mobile sticky top-0 z-50 bg-background/95 backdrop-blur-sm border-b border-border">
@@ -31,27 +30,43 @@ export function MobileHeader({ mockData }: MobileHeaderProps) {
         </div>
 
         <Sheet>
-          {/* Right: Notifications Menu */}
+          {/* Right: Wallet Menu */}
           <SheetTrigger asChild>
             <Button variant="secondary" size="icon" className="relative">
-              {unreadCount > 0 && (
-                <Badge className="absolute border-2 border-background -top-1 -left-2 h-5 w-5 text-xs p-0 flex items-center justify-center">
-                  {unreadCount > 9 ? "9+" : unreadCount}
-                </Badge>
-              )}
-              <BellIcon className="size-4" />
+              <Wallet className="size-4" />
             </Button>
           </SheetTrigger>
 
-          {/* Notifications Sheet */}
+          {/* Wallet Sheet */}
           <SheetContent
             closeButton={false}
             side="right"
-            className="w-[80%] max-w-md p-0"
+            className="w-[90%] max-w-md p-0"
           >
-            <MobileNotifications
-              initialNotifications={mockData.notifications}
-            />
+            <div className="h-full flex flex-col">
+              {/* Accessibility Title */}
+              <SheetHeader className="sr-only">
+                <SheetTitle>Wallet</SheetTitle>
+              </SheetHeader>
+
+              {/* Header */}
+              <div className="flex items-center justify-between p-4 border-b border-border">
+                <h2 className="text-sm font-medium uppercase">Wallet</h2>
+                <SheetClose>
+                  <Badge
+                    variant="secondary"
+                    className="uppercase text-muted-foreground"
+                  >
+                    Close
+                  </Badge>
+                </SheetClose>
+              </div>
+
+              {/* Wallet Content */}
+              <div className="flex-1 overflow-y-auto p-4 bg-muted">
+                <CDPWalletCard />
+              </div>
+            </div>
           </SheetContent>
         </Sheet>
       </div>

@@ -10,7 +10,6 @@ import { DashboardSidebar } from './components/dashboard/sidebar';
 import Widget from './components/dashboard/widget';
 import { CDPWalletCard } from './components/dashboard/cdp-wallet-card';
 import { SignInModal } from './components/auth/SignInModal';
-import { MobileChat } from './components/chat/mobile-chat';
 import { MobileHeader } from './components/dashboard/mobile-header';
 import { MessageSquare } from 'lucide-react';
 import mockDataJson from './mock.json';
@@ -550,9 +549,6 @@ function App() {
           </div>
             </div>
           </div>
-
-      {/* Mobile Chat */}
-      <MobileChat />
     </SidebarProvider>
   );
 }

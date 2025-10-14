@@ -651,8 +651,8 @@ export function CDPWalletCard() {
   // Show connected state with wallet info
   if (isSignedIn && evmAddress) {
     return (
-      <Card className="max-h-[calc(100vh-2rem)] overflow-hidden flex flex-col">
-        <CardContent className="bg-accent p-1.5 flex-1 overflow-auto relative">
+      <Card className="max-h-[calc(100vh-2rem)] w-full overflow-hidden flex flex-col">
+        <CardContent className="bg-accent p-1.5 flex-1 overflow-auto relative w-full">
           {/* Refresh button in top right corner of dark background */}
           <Button
             onClick={handleManualRefresh}
@@ -665,7 +665,7 @@ export function CDPWalletCard() {
             <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
           </Button>
           
-          <div className="space-y-4 bg-background rounded-lg p-4 border border-border/30">
+          <div className="space-y-4 bg-background rounded-lg p-3 sm:p-4 border border-border/30 w-full overflow-hidden">
             {/* Error message */}
             {error && (
               <div className="text-xs text-red-500 bg-red-500/10 p-2 rounded border border-red-500/20">
@@ -718,10 +718,10 @@ export function CDPWalletCard() {
           </div>
 
           {/* Tabs */}
-          <div className="flex gap-1 border-b border-border">
+          <div className="flex gap-1 border-b border-border overflow-x-auto scrollbar-hide">
             <button
               onClick={() => setActiveTab('tokens')}
-              className={`px-4 py-2 text-sm font-medium transition-colors ${
+              className={`px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium transition-colors whitespace-nowrap ${
                 activeTab === 'tokens'
                   ? 'text-foreground border-b-2 border-primary'
                   : 'text-muted-foreground hover:text-foreground'
@@ -731,7 +731,7 @@ export function CDPWalletCard() {
             </button>
             <button
               onClick={() => setActiveTab('collections')}
-              className={`px-4 py-2 text-sm font-medium transition-colors ${
+              className={`px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium transition-colors whitespace-nowrap ${
                 activeTab === 'collections'
                   ? 'text-foreground border-b-2 border-primary'
                   : 'text-muted-foreground hover:text-foreground'
@@ -741,7 +741,7 @@ export function CDPWalletCard() {
             </button>
             <button
               onClick={() => setActiveTab('history')}
-              className={`px-4 py-2 text-sm font-medium transition-colors ${
+              className={`px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium transition-colors whitespace-nowrap ${
                 activeTab === 'history'
                   ? 'text-foreground border-b-2 border-primary'
                   : 'text-muted-foreground hover:text-foreground'
@@ -777,10 +777,10 @@ export function CDPWalletCard() {
                 tokens.map((token, index) => (
                   <div
                     key={`${token.chain}-${token.contractAddress || token.symbol}-${index}`}
-                    className="flex items-center justify-between p-2 rounded hover:bg-muted/50 transition-colors"
+                    className="flex items-center justify-between p-2 rounded hover:bg-muted/50 transition-colors min-w-0"
                   >
-                    <div className="flex items-center gap-3 flex-1">
-                      <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center overflow-hidden">
+                    <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0">
+                      <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-muted flex items-center justify-center overflow-hidden flex-shrink-0">
                         {token.icon.startsWith('http') ? (
                           <img 
                             src={token.icon} 
@@ -793,22 +793,22 @@ export function CDPWalletCard() {
                             }}
                           />
                         ) : (
-                          <span className="text-lg">{token.icon}</span>
+                          <span className="text-base sm:text-lg">{token.icon}</span>
                         )}
                       </div>
-                      <div className="flex flex-col">
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-medium">{token.symbol}</span>
-                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground uppercase font-mono">
+                      <div className="flex flex-col min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+                          <span className="text-xs sm:text-sm font-medium truncate">{token.symbol}</span>
+                          <span className="text-[9px] sm:text-[10px] px-1 sm:px-1.5 py-0.5 rounded bg-muted text-muted-foreground uppercase font-mono whitespace-nowrap">
                             {token.chain}
                           </span>
                         </div>
-                        <span className="text-xs text-muted-foreground">
+                        <span className="text-xs text-muted-foreground truncate">
                           {parseFloat(token.balanceFormatted).toFixed(4)}
                         </span>
                       </div>
                     </div>
-                    <span className="text-sm font-mono">
+                    <span className="text-xs sm:text-sm font-mono flex-shrink-0 ml-2">
                       ${token.usdValue.toFixed(2)}
                     </span>
                   </div>
@@ -837,48 +837,48 @@ export function CDPWalletCard() {
                   const amount = parseFloat(tx.value || '0').toFixed(4);
                   const asset = tx.asset || 'ETH';
                   
-                  return (
-                    <div
-                      key={`${tx.hash}-${index}`}
-                      className="flex items-center justify-between p-2 rounded hover:bg-muted/50 transition-colors"
-                    >
-                      <div className="flex items-center gap-3 flex-1 min-w-0">
-                        <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
-                          isReceived ? 'bg-green-500/10' : 'bg-red-500/10'
-                        }`}>
-                          <span className="text-lg">
-                            {isReceived ? '↓' : '↑'}
-                          </span>
-                        </div>
-                        <div className="flex flex-col min-w-0">
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm font-medium">
-                              {isReceived ? 'Received' : 'Sent'}
-                            </span>
-                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground uppercase font-mono">
-                              {tx.chainName}
-                            </span>
-                          </div>
-                          <span className="text-xs text-muted-foreground truncate">
-                            {isReceived 
-                              ? `From: ${tx.from?.slice(0, 6)}...${tx.from?.slice(-4)}`
-                              : `To: ${tx.to?.slice(0, 6)}...${tx.to?.slice(-4)}`
-                            }
-                          </span>
-                        </div>
-                      </div>
-                      <div className="flex flex-col items-end">
-                        <span className={`text-sm font-mono font-medium ${
-                          isReceived ? 'text-green-500' : 'text-red-500'
-                        }`}>
-                          {isReceived ? '+' : '-'}{amount} {asset}
-                        </span>
-                        <span className="text-xs text-muted-foreground">
-                          Block #{parseInt(tx.blockNum, 16)}
-                        </span>
-                      </div>
+            return (
+              <div
+                key={`${tx.hash}-${index}`}
+                className="flex items-center justify-between p-2 rounded hover:bg-muted/50 transition-colors min-w-0"
+              >
+                <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0">
+                  <div className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
+                    isReceived ? 'bg-green-500/10' : 'bg-red-500/10'
+                  }`}>
+                    <span className="text-base sm:text-lg">
+                      {isReceived ? '↓' : '↑'}
+                    </span>
+                  </div>
+                  <div className="flex flex-col min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+                      <span className="text-xs sm:text-sm font-medium">
+                        {isReceived ? 'Received' : 'Sent'}
+                      </span>
+                      <span className="text-[9px] sm:text-[10px] px-1 sm:px-1.5 py-0.5 rounded bg-muted text-muted-foreground uppercase font-mono whitespace-nowrap">
+                        {tx.chainName}
+                      </span>
                     </div>
-                  );
+                    <span className="text-xs text-muted-foreground truncate">
+                      {isReceived 
+                        ? `From: ${tx.from?.slice(0, 6)}...${tx.from?.slice(-4)}`
+                        : `To: ${tx.to?.slice(0, 6)}...${tx.to?.slice(-4)}`
+                      }
+                    </span>
+                  </div>
+                </div>
+                <div className="flex flex-col items-end flex-shrink-0 ml-2">
+                  <span className={`text-xs sm:text-sm font-mono font-medium ${
+                    isReceived ? 'text-green-500' : 'text-red-500'
+                  }`}>
+                    {isReceived ? '+' : '-'}{amount} {asset}
+                  </span>
+                  <span className="text-[10px] sm:text-xs text-muted-foreground whitespace-nowrap">
+                    Block #{parseInt(tx.blockNum, 16)}
+                  </span>
+                </div>
+              </div>
+            );
                 })
               )
             )}
@@ -888,11 +888,11 @@ export function CDPWalletCard() {
           {/* Simple Fund Modal */}
           {showFundModal && (
             <div 
-              className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm"
+              className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
               onClick={() => setShowFundModal(false)}
             >
               <div 
-                className="bg-background border border-border rounded-lg p-6 max-w-md w-full mx-4 space-y-4"
+                className="bg-background border border-border rounded-lg p-4 sm:p-6 max-w-md w-full space-y-4 max-h-[90vh] overflow-y-auto"
                 onClick={(e) => e.stopPropagation()}
               >
                 <h3 className="text-lg font-semibold">Fund Your Wallet</h3>

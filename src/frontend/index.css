@@ -3,7 +3,8 @@
 
 @font-face {
   font-family: "Rebels";
-  src: url("/fonts/Rebels-Fett.woff2") format("woff2");
+  src: url("/Rebels-Fett.woff2") format("woff2"),
+       url("/Rebels-Fett.woff") format("woff");
   font-weight: normal;
   font-style: normal;
   font-display: swap;

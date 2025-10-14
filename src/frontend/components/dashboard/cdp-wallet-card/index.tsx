@@ -1,8 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useCDPWallet } from '@/hooks/useCDPWallet';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Bullet } from '@/components/ui/bullet';
 import { Copy, Check, TrendingUp, RefreshCw, Send } from 'lucide-react';
 import { formatUnits, createPublicClient, http } from 'viem';
 import { base, mainnet, polygon } from 'viem/chains';
@@ -620,13 +619,7 @@ export function CDPWalletCard() {
   if (!isInitialized) {
     return (
       <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2.5">
-            <Bullet />
-            CDP Wallet
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
+        <CardContent className="pt-6">
           <div className="flex items-center justify-center py-8">
             <div className="text-center">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
@@ -659,23 +652,19 @@ export function CDPWalletCard() {
   if (isSignedIn && evmAddress) {
     return (
       <Card className="max-h-[calc(100vh-2rem)] overflow-hidden flex flex-col">
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium uppercase flex items-center gap-2">
-            <Bullet />
-            Wallet
-          </CardTitle>
+        <CardContent className="bg-accent p-1.5 flex-1 overflow-auto relative">
+          {/* Refresh button in top right corner of dark background */}
           <Button
             onClick={handleManualRefresh}
             disabled={isRefreshing}
             variant="ghost"
             size="sm"
-            className="h-8 w-8 p-0 opacity-50 hover:opacity-100"
+            className="absolute top-2 right-2 h-8 w-8 p-0 opacity-50 hover:opacity-100 z-10"
             title="Refresh balances"
           >
             <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
           </Button>
-        </CardHeader>
-        <CardContent className="bg-accent p-1.5 flex-1 overflow-auto">
+          
           <div className="space-y-4 bg-background rounded-lg p-4 border border-border/30">
             {/* Error message */}
             {error && (

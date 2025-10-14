@@ -128,48 +128,50 @@ export function DashboardSidebar({
               </div>
             </div>
 
-            <SidebarMenu>
-              {channels.length === 0 ? (
-                <div className="px-2 py-8 text-center">
-                  <p className="text-xs text-muted-foreground uppercase tracking-wider">
-                    No conversations yet
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Click + to start a new chat
-                  </p>
-                </div>
-              ) : (
-                channels.map((channel) => {
-                  const isActive = activeChannelId === channel.id
-                  
-                  return (
-                    <SidebarMenuItem key={channel.id}>
-                      <SidebarMenuButton
-                        onClick={() => onChannelSelect(channel.id)}
-                        isActive={isActive}
-                        className="w-full"
-                      >
-                        <div className="flex flex-col items-start gap-1 w-full min-w-0">
-                          <span className="font-medium text-sm truncate w-full">
-                            {channel.name}
-                          </span>
-                          {channel.lastMessageAt && channel.lastMessageAt > 0 && (
-                            <span className="text-xs text-muted-foreground">
-                              {new Date(channel.lastMessageAt).toLocaleDateString('en-US', { 
-                                month: 'short', 
-                                day: 'numeric',
-                                hour: '2-digit',
-                                minute: '2-digit'
-                              })}
+            <div className="max-h-[calc(100vh-28rem)] overflow-y-auto">
+              <SidebarMenu>
+                {channels.length === 0 ? (
+                  <div className="px-2 py-8 text-center">
+                    <p className="text-xs text-muted-foreground uppercase tracking-wider">
+                      No conversations yet
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Click + to start a new chat
+                    </p>
+                  </div>
+                ) : (
+                  channels.map((channel) => {
+                    const isActive = activeChannelId === channel.id
+                    
+                    return (
+                      <SidebarMenuItem key={channel.id}>
+                        <SidebarMenuButton
+                          onClick={() => onChannelSelect(channel.id)}
+                          isActive={isActive}
+                          className="w-full"
+                        >
+                          <div className="flex flex-col items-start gap-1 w-full min-w-0">
+                            <span className="font-medium text-sm truncate w-full">
+                              {channel.name}
                             </span>
-                          )}
-                        </div>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  )
-                })
-              )}
-            </SidebarMenu>
+                            {channel.lastMessageAt && channel.lastMessageAt > 0 && (
+                              <span className="text-xs text-muted-foreground">
+                                {new Date(channel.lastMessageAt).toLocaleDateString('en-US', { 
+                                  month: 'short', 
+                                  day: 'numeric',
+                                  hour: '2-digit',
+                                  minute: '2-digit'
+                                })}
+                              </span>
+                            )}
+                          </div>
+                        </SidebarMenuButton>
+                      </SidebarMenuItem>
+                    )
+                  })
+                )}
+              </SidebarMenu>
+            </div>
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>

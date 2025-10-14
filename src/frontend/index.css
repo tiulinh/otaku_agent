@@ -12,8 +12,8 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
-  --font-display: var(--font-rebels);
-  --font-mono: var(--font-roboto-mono);
+  --font-display: "Rebels", sans-serif;
+  --font-mono: "Roboto Mono", monospace;
 
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -160,7 +160,11 @@
     @apply border-border outline-ring/50 overscroll-none;
   }
   body {
-    @apply bg-muted text-foreground font-mono;
+    @apply bg-muted text-foreground;
+    font-family: "Roboto Mono", monospace;
+  }
+  .font-display {
+    font-family: "Rebels", sans-serif !important;
   }
 }
 

@@ -9,6 +9,7 @@ import { formatUnits, createPublicClient, http } from 'viem';
 import { base, mainnet, polygon } from 'viem/chains';
 import { SendModal } from './SendModal';
 import { TokenDetailModal } from './TokenDetailModal';
+import { NFTDetailModal } from './NFTDetailModal';
 
 // Supported chains
 type ChainNetwork = 'base' | 'ethereum' | 'polygon';
@@ -90,6 +91,23 @@ interface TokenBalance {
   decimals?: number;
 }
 
+// Individual NFT interface
+interface NFT {
+  tokenId: string;
+  name: string;
+  description?: string;
+  image: string;
+  contractAddress: string;
+  contractName: string;
+  tokenType: string; // ERC721, ERC1155
+  chain: ChainNetwork;
+  balance?: string;
+  attributes?: Array<{
+    trait_type: string;
+    value: string | number;
+  }>;
+}
+
 // Token info from CoinGecko
 interface TokenInfo {
   symbol: string;
@@ -127,6 +145,9 @@ export function CDPWalletCard() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [transactions, setTransactions] = useState<any[]>([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+  const [nfts, setNfts] = useState<NFT[]>([]);
+  const [isLoadingNFTs, setIsLoadingNFTs] = useState(false);
+  const [selectedNFT, setSelectedNFT] = useState<NFT | null>(null);
   
   // Ref to store the auto-refresh interval
   const refreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -555,6 +576,103 @@ export function CDPWalletCard() {
     }
   }, [evmAddress]);
 
+  // Fetch individual NFTs across all chains using Alchemy API
+  const fetchNFTs = useCallback(async () => {
+    if (!evmAddress) return;
+    
+    setIsLoadingNFTs(true);
+    try {
+      const chains: ChainNetwork[] = ['base', 'ethereum', 'polygon'];
+      const allNFTs: NFT[] = [];
+      
+      for (const chain of chains) {
+        const chainConfig = CHAIN_CONFIGS[chain];
+        const rpcUrl = import.meta.env[chainConfig.rpcUrl];
+        
+        if (!rpcUrl) {
+          console.warn(`⚠️ ${chainConfig.rpcUrl} not configured, skipping NFT fetch for ${chain}`);
+          continue;
+        }
+        
+        try {
+          // Use Alchemy's REST API getNFTs endpoint
+          // The RPC URL is like: https://base-mainnet.g.alchemy.com/v2/API_KEY
+          // We need to convert it to: https://base-mainnet.g.alchemy.com/nft/v3/API_KEY/getNFTsForOwner
+          const apiKey = rpcUrl.split('/v2/')[1];
+          const baseUrl = rpcUrl.split('/v2/')[0];
+          const nftApiUrl = `${baseUrl}/nft/v3/${apiKey}/getNFTsForOwner`;
+          
+          const params = new URLSearchParams({
+            owner: evmAddress,
+            'excludeFilters[]': 'SPAM',
+            withMetadata: 'true',
+          });
+          
+          const response = await fetch(`${nftApiUrl}?${params}`, {
+            method: 'GET',
+            headers: { 'Accept': 'application/json' },
+          });
+          
+          if (!response.ok) {
+            console.warn(`⚠️ NFT fetch failed for ${chain}: ${response.status}`);
+            continue;
+          }
+          
+          const data = await response.json();
+          const ownedNfts = data.ownedNfts || [];
+          
+          // Convert to our NFT interface
+          for (const nft of ownedNfts) {
+            const contractAddress = nft.contract?.address;
+            if (!contractAddress) continue;
+            
+            // Get image URL
+            let imageUrl = nft.image?.cachedUrl || nft.image?.originalUrl || nft.image?.thumbnailUrl;
+            if (!imageUrl && nft.raw?.metadata?.image) {
+              imageUrl = nft.raw.metadata.image;
+              // Convert IPFS URLs to HTTP
+              if (imageUrl.startsWith('ipfs://')) {
+                imageUrl = imageUrl.replace('ipfs://', 'https://ipfs.io/ipfs/');
+              }
+            }
+            
+            allNFTs.push({
+              tokenId: nft.tokenId || '0',
+              name: nft.name || nft.raw?.metadata?.name || `${nft.contract?.name || 'Unknown'} #${nft.tokenId}`,
+              description: nft.description || nft.raw?.metadata?.description,
+              image: imageUrl || '',
+              contractAddress,
+              contractName: nft.contract?.name || nft.contract?.symbol || 'Unknown Collection',
+              tokenType: nft.contract?.tokenType || 'ERC721',
+              chain,
+              balance: nft.balance,
+              attributes: nft.raw?.metadata?.attributes || [],
+            });
+          }
+          
+          console.log(`✅ Found ${ownedNfts.length} NFTs on ${chain}`);
+        } catch (err) {
+          console.warn(`❌ Failed to fetch NFTs for ${chain}:`, err);
+        }
+      }
+      
+      // Sort by contract name and token ID
+      allNFTs.sort((a, b) => {
+        const nameCompare = a.contractName.localeCompare(b.contractName);
+        if (nameCompare !== 0) return nameCompare;
+        return parseInt(a.tokenId) - parseInt(b.tokenId);
+      });
+      
+      setNfts(allNFTs);
+      console.log(`🖼️ Loaded ${allNFTs.length} total NFTs`);
+    } catch (err: any) {
+      console.error('Failed to fetch NFTs:', err);
+      setError('Failed to load NFTs');
+    } finally {
+      setIsLoadingNFTs(false);
+    }
+  }, [evmAddress]);
+
   // Helper to start/restart the auto-refresh timer
   const startAutoRefresh = useCallback(() => {
     // Clear existing interval
@@ -603,16 +721,25 @@ export function CDPWalletCard() {
     }
   }, [activeTab, evmAddress, fetchTransactionHistory, transactions.length]);
 
+  // Fetch NFTs when Collections tab is active
+  useEffect(() => {
+    if (activeTab === 'collections' && evmAddress && nfts.length === 0) {
+      fetchNFTs();
+    }
+  }, [activeTab, evmAddress, fetchNFTs, nfts.length]);
+
   // Manual refresh handler that resets the auto-refresh timer
   const handleManualRefresh = useCallback(() => {
     console.log('🔄 Manual refresh triggered, resetting timer...');
     fetchTokenBalances(true);
     if (activeTab === 'history') {
       fetchTransactionHistory();
+    } else if (activeTab === 'collections') {
+      fetchNFTs();
     }
     // Reset the auto-refresh timer
     startAutoRefresh();
-  }, [fetchTokenBalances, fetchTransactionHistory, activeTab, startAutoRefresh]);
+  }, [fetchTokenBalances, fetchTransactionHistory, fetchNFTs, activeTab, startAutoRefresh]);
 
   // Handle copy address
   const handleCopyAddress = async () => {
@@ -834,10 +961,69 @@ export function CDPWalletCard() {
                 ))
               )
             ) : activeTab === 'collections' ? (
-              // Collections placeholder
-              <div className="text-center py-8 text-sm text-muted-foreground">
-                NFT Collections coming soon
-              </div>
+              // NFT List
+              isLoadingNFTs ? (
+                // Loading state
+                <div className="flex items-center justify-center py-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                </div>
+              ) : nfts.length === 0 ? (
+                <div className="text-center py-8 text-sm text-muted-foreground">
+                  No NFTs found
+                </div>
+              ) : (
+                // NFT list
+                nfts.map((nft, index) => (
+                  <button
+                    key={`${nft.chain}-${nft.contractAddress}-${nft.tokenId}-${index}`}
+                    onClick={() => setSelectedNFT(nft)}
+                    className="w-full flex items-center gap-2 sm:gap-3 p-2 rounded hover:bg-muted/50 transition-colors min-w-0 cursor-pointer text-left"
+                  >
+                    <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-lg bg-muted flex items-center justify-center overflow-hidden flex-shrink-0 border border-border/30">
+                      {nft.image ? (
+                        <img 
+                          src={nft.image} 
+                          alt={nft.name}
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            // Fallback to emoji if image fails to load
+                            const parent = e.currentTarget.parentElement;
+                            if (parent) {
+                              parent.innerHTML = `<span class="text-2xl">🖼️</span>`;
+                            }
+                          }}
+                        />
+                      ) : (
+                        <span className="text-2xl">🖼️</span>
+                      )}
+                    </div>
+                    <div className="flex flex-col min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
+                        <span className="text-xs sm:text-sm font-medium truncate flex-1 min-w-0">{nft.name}</span>
+                        <span className="text-[9px] sm:text-[10px] px-1 sm:px-1.5 py-0.5 rounded bg-muted text-muted-foreground uppercase font-mono whitespace-nowrap flex-shrink-0">
+                          {nft.chain}
+                        </span>
+                      </div>
+                      <span className="text-xs text-muted-foreground truncate">
+                        {nft.contractName}
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] text-muted-foreground/70 font-mono">
+                          #{nft.tokenId}
+                        </span>
+                        {nft.balance && nft.tokenType === 'ERC1155' && (
+                          <>
+                            <span className="text-[10px] text-muted-foreground/70">•</span>
+                            <span className="text-[10px] text-muted-foreground/70">
+                              x{nft.balance}
+                            </span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </button>
+                ))
+              )
             ) : (
               // Transaction History
               isLoadingHistory ? (
@@ -1053,6 +1239,19 @@ export function CDPWalletCard() {
             <TokenDetailModal
               token={selectedToken}
               onClose={() => setSelectedToken(null)}
+            />
+          )}
+
+          {/* NFT Detail Modal */}
+          {selectedNFT && (
+            <NFTDetailModal
+              nft={selectedNFT}
+              onClose={() => setSelectedNFT(null)}
+              onSuccess={() => {
+                setSelectedNFT(null);
+                // Refresh NFTs after successful send
+                fetchNFTs();
+              }}
             />
           )}
           </div>

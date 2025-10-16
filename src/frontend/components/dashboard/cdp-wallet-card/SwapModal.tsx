@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { Button } from '../../ui/button';
 import { X, ArrowDownUp, Loader2 } from 'lucide-react';
@@ -38,6 +38,10 @@ export function SwapModal({ isOpen, onClose, tokens, userId, onSuccess }: SwapMo
   const [warning, setWarning] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [txHash, setTxHash] = useState<string | null>(null);
+  const [isFromDropdownOpen, setIsFromDropdownOpen] = useState(false);
+  const [isToDropdownOpen, setIsToDropdownOpen] = useState(false);
+  const fromDropdownRef = useRef<HTMLDivElement>(null);
+  const toDropdownRef = useRef<HTMLDivElement>(null);
 
   // Filter tokens for swap (CDP networks + 1inch supported networks)
   const SWAP_SUPPORTED_NETWORKS = ['base', 'ethereum', 'polygon', 'arbitrum', 'optimism'];
@@ -55,6 +59,26 @@ export function SwapModal({ isOpen, onClose, tokens, userId, onSuccess }: SwapMo
     return result.replace(/^0+/, '') || '0';
   };
 
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (fromDropdownRef.current && !fromDropdownRef.current.contains(event.target as Node)) {
+        setIsFromDropdownOpen(false);
+      }
+      if (toDropdownRef.current && !toDropdownRef.current.contains(event.target as Node)) {
+        setIsToDropdownOpen(false);
+      }
+    };
+
+    if (isFromDropdownOpen || isToDropdownOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isFromDropdownOpen, isToDropdownOpen]);
+
   // Reset state when modal opens/closes
   useEffect(() => {
     if (isOpen) {
@@ -67,6 +91,8 @@ export function SwapModal({ isOpen, onClose, tokens, userId, onSuccess }: SwapMo
       setWarning(null);
       setSuccess(false);
       setTxHash(null);
+      setIsFromDropdownOpen(false);
+      setIsToDropdownOpen(false);
     }
   }, [isOpen]);
 
@@ -201,39 +227,19 @@ export function SwapModal({ isOpen, onClose, tokens, userId, onSuccess }: SwapMo
     }
   };
 
+  // Get token icon (with fallback for native tokens)
   const getTokenIcon = (token: Token) => {
     if (token.icon) {
-      return (
-        <img 
-          src={token.icon} 
-          alt={token.symbol} 
-          className="w-full h-full object-contain p-0.5"
-          onError={(e) => {
-            const parent = e.currentTarget.parentElement;
-            if (parent) {
-              parent.innerHTML = `<span class="text-sm font-bold text-muted-foreground uppercase">${token.symbol.charAt(0)}</span>`;
-            }
-          }}
-        />
-      );
+      return token.icon;
     }
-
+    
+    // Try to get from constants by symbol
     const iconPath = getTokenIconBySymbol(token.symbol);
     if (iconPath) {
-      return (
-        <img 
-          src={iconPath} 
-          alt={token.symbol} 
-          className="w-full h-full object-contain p-0.5"
-        />
-      );
+      return iconPath;
     }
-
-    return (
-      <span className="text-sm font-bold text-muted-foreground uppercase">
-        {token.symbol.charAt(0)}
-      </span>
-    );
+    
+    return null;
   };
 
   if (!isOpen) return null;
@@ -244,10 +250,10 @@ export function SwapModal({ isOpen, onClose, tokens, userId, onSuccess }: SwapMo
       onClick={onClose}
     >
       <div 
-        className="bg-background rounded-lg max-w-md w-full max-h-[90vh] overflow-hidden p-1.5"
+        className="bg-background rounded-lg max-w-md w-full max-h-[90vh] p-1.5"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="bg-pop rounded-lg p-4 sm:p-6 space-y-4 max-h-[calc(90vh-0.75rem)] overflow-y-auto">
+        <div className="bg-pop rounded-lg p-4 sm:p-6 space-y-4 max-h-[calc(90vh-0.75rem)] flex flex-col">
           {/* Header */}
           <div className="flex items-center justify-between">
             <h3 className="text-lg font-semibold">Swap Tokens</h3>
@@ -263,104 +269,140 @@ export function SwapModal({ isOpen, onClose, tokens, userId, onSuccess }: SwapMo
 
           {success ? (
             // Success State
-            <div className="space-y-4 py-4">
-              <div className="flex flex-col items-center gap-3">
-                <div className="w-12 h-12 rounded-full bg-green-500/10 flex items-center justify-center">
-                  <span className="text-2xl">✓</span>
-                </div>
-                <div className="text-center">
-                  <p className="font-medium text-green-500">Swap Successful!</p>
-                  {txHash && (
-                    <a 
-                      href={`https://${fromToken?.chain === 'base' ? 'basescan.org' : 'etherscan.io'}/tx/${txHash}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-xs text-muted-foreground hover:text-foreground mt-1 inline-block"
-                    >
-                      View transaction →
-                    </a>
-                  )}
+            <div className="flex-1 overflow-y-auto">
+              <div className="space-y-4 py-4">
+                <div className="flex flex-col items-center gap-3">
+                  <div className="w-12 h-12 rounded-full bg-green-500/10 flex items-center justify-center">
+                    <span className="text-2xl">✓</span>
+                  </div>
+                  <div className="text-center">
+                    <p className="font-medium text-green-500">Swap Successful!</p>
+                    {txHash && (
+                      <a 
+                        href={`https://${fromToken?.chain === 'base' ? 'basescan.org' : 'etherscan.io'}/tx/${txHash}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs text-muted-foreground hover:text-foreground mt-1 inline-block"
+                      >
+                        View transaction →
+                      </a>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
           ) : (
-            <>
-              {/* Network Notice */}
-              <div className="text-xs text-muted-foreground bg-muted/50 p-2 rounded">
-                ⓘ Swaps supported on: Ethereum, Base (via CDP), Polygon, Arbitrum, Optimism (via Uniswap V3). Note: Price estimation only available for CDP networks.
-              </div>
+            <div className="flex-1 overflow-y-auto space-y-4">
 
               {/* From Token */}
               <div className="space-y-2">
                 <label className="text-xs text-muted-foreground">From</label>
-                <div className="space-y-2">
-                  {/* Token Selector */}
-                  <select
-                    value={fromToken ? `${fromToken.chain}-${fromToken.contractAddress || fromToken.symbol}` : ''}
-                    onChange={(e) => {
-                      const selected = swapSupportedTokens.find(
-                        t => `${t.chain}-${t.contractAddress || t.symbol}` === e.target.value
-                      );
-                      setFromToken(selected || null);
-                      setFromAmount('');
-                      setToAmount('');
-                    }}
-                    className="w-full bg-muted border border-border rounded-lg p-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                  >
-                    <option value="">Select token</option>
-                    {swapSupportedTokens.map((token, idx) => (
-                      <option 
-                        key={`${token.chain}-${token.contractAddress || token.symbol}-${idx}`}
-                        value={`${token.chain}-${token.contractAddress || token.symbol}`}
-                        disabled={!!(toToken && token.chain === toToken.chain && token.contractAddress === toToken.contractAddress)}
-                      >
-                        {token.symbol} ({token.chain}) - {token.balanceFormatted}
-                      </option>
-                    ))}
-                  </select>
-
-                  {/* Selected Token Info */}
-                  {fromToken && (
-                    <div className="flex items-center gap-2 p-2 bg-muted/50 rounded-lg">
-                      <div className="w-8 h-8 rounded-full bg-background flex items-center justify-center overflow-hidden flex-shrink-0">
-                        {getTokenIcon(fromToken)}
-                      </div>
-                      <div className="flex-1 min-w-0">
+                <div className="space-y-2" style={{ overflow: 'visible' }}>
+                  {/* Custom Dropdown */}
+                  <div className="relative" ref={fromDropdownRef} style={{ zIndex: 60 }}>
+                    <button
+                      type="button"
+                      onClick={() => setIsFromDropdownOpen(!isFromDropdownOpen)}
+                      className="w-full p-3 border border-border rounded-lg flex items-center justify-between hover:bg-accent/50 transition-colors"
+                    >
+                      {fromToken ? (
                         <div className="flex items-center gap-2">
-                          <span className="text-sm font-medium">{fromToken.symbol}</span>
-                          <span className="text-xs px-1.5 py-0.5 rounded bg-muted text-muted-foreground uppercase font-mono">
-                            {fromToken.chain}
-                          </span>
+                          <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center overflow-hidden">
+                            {getTokenIcon(fromToken) ? (
+                              <img src={getTokenIcon(fromToken)!} alt={fromToken.symbol} className="w-full h-full object-cover" />
+                            ) : (
+                              <span className="text-sm font-bold text-muted-foreground uppercase">{fromToken.symbol.charAt(0)}</span>
+                            )}
+                          </div>
+                          <div className="text-left">
+                            <p className="text-sm font-medium">{fromToken.symbol}</p>
+                            <p className="text-xs text-muted-foreground">{fromToken.chain.toUpperCase()}</p>
+                          </div>
                         </div>
-                        <span className="text-xs text-muted-foreground">
-                          Balance: {fromToken.balanceFormatted}
-                        </span>
-                      </div>
-                    </div>
-                  )}
+                      ) : (
+                        <span className="text-muted-foreground">Select a token...</span>
+                      )}
+                      <svg className="w-4 h-4 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </button>
 
-                  {/* Amount Input */}
-                  {fromToken && (
-                    <div className="relative">
-                      <input
-                        type="number"
-                        value={fromAmount}
-                        onChange={(e) => setFromAmount(e.target.value)}
-                        placeholder="0.0"
-                        step="any"
-                        min="0"
-                        className="w-full bg-muted border border-border rounded-lg p-3 pr-16 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                      />
-                      <Button
-                        onClick={handleSetMaxAmount}
-                        variant="ghost"
-                        size="sm"
-                        className="absolute right-2 top-1/2 -translate-y-1/2 h-7 text-xs"
-                      >
-                        MAX
-                      </Button>
-                    </div>
-                  )}
+                    {/* Dropdown Menu */}
+                    {isFromDropdownOpen && (
+                      <div className="absolute z-50 w-full mt-1 bg-popover border border-border rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                        {swapSupportedTokens
+                          .filter(token => {
+                            // Hide the exact same token as toToken (same chain and same address/symbol)
+                            if (!toToken) return true;
+                            return !(token.chain === toToken.chain && (token.contractAddress || token.symbol) === (toToken.contractAddress || toToken.symbol));
+                          })
+                          .map((token, index) => {
+                            return (
+                              <button
+                                key={`${token.chain}-${token.contractAddress || token.symbol}-${index}`}
+                                type="button"
+                                onClick={() => {
+                                  setFromToken(token);
+                                  setFromAmount('');
+                                  setToAmount('');
+                                  // Reset toToken if it's on a different chain
+                                  if (toToken && toToken.chain !== token.chain) {
+                                    setToToken(null);
+                                  }
+                                  setIsFromDropdownOpen(false);
+                                }}
+                                className={`w-full p-3 flex items-center justify-between hover:bg-accent transition-colors ${
+                                  fromToken === token ? 'bg-accent' : ''
+                                }`}
+                              >
+                              <div className="flex items-center gap-2">
+                                <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center overflow-hidden">
+                                  {getTokenIcon(token) ? (
+                                    <img src={getTokenIcon(token)!} alt={token.symbol} className="w-full h-full object-cover" />
+                                  ) : (
+                                    <span className="text-sm font-bold text-muted-foreground uppercase">{token.symbol.charAt(0)}</span>
+                                  )}
+                                </div>
+                                <div className="text-left">
+                                  <p className="text-sm font-medium">{token.symbol}</p>
+                                  <p className="text-xs text-muted-foreground">{token.chain.toUpperCase()}</p>
+                                </div>
+                              </div>
+                              <div className="text-right">
+                                <p className="text-sm font-mono">{parseFloat(token.balanceFormatted).toFixed(6)}</p>
+                                <p className="text-xs text-muted-foreground">${token.usdValue?.toFixed(2) || '0.00'}</p>
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Amount Input - Always visible */}
+                  <div className="relative">
+                    <input
+                      type="number"
+                      value={fromAmount}
+                      onChange={(e) => setFromAmount(e.target.value)}
+                      placeholder="0.0"
+                      step="any"
+                      min="0"
+                      disabled={!fromToken}
+                      className={`w-full bg-muted border border-border rounded-lg p-3 pr-16 text-sm focus:outline-none focus:ring-2 focus:ring-primary ${
+                        !fromToken ? 'opacity-50 cursor-not-allowed' : ''
+                      }`}
+                    />
+                    <Button
+                      onClick={handleSetMaxAmount}
+                      variant="ghost"
+                      size="sm"
+                      disabled={!fromToken}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 h-7 text-xs"
+                    >
+                      MAX
+                    </Button>
+                  </div>
                 </div>
               </div>
 
@@ -380,74 +422,104 @@ export function SwapModal({ isOpen, onClose, tokens, userId, onSuccess }: SwapMo
               {/* To Token */}
               <div className="space-y-2">
                 <label className="text-xs text-muted-foreground">To</label>
-                <div className="space-y-2">
-                  {/* Token Selector */}
-                  <select
-                    value={toToken ? `${toToken.chain}-${toToken.contractAddress || toToken.symbol}` : ''}
-                    onChange={(e) => {
-                      const selected = swapSupportedTokens.find(
-                        t => `${t.chain}-${t.contractAddress || t.symbol}` === e.target.value
-                      );
-                      setToToken(selected || null);
-                      setToAmount('');
-                    }}
-                    className="w-full bg-muted border border-border rounded-lg p-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                    disabled={!fromToken}
-                  >
-                    <option value="">Select token</option>
-                    {swapSupportedTokens
-                      .filter(t => fromToken ? t.chain === fromToken.chain : true)
-                      .map((token, idx) => (
-                        <option 
-                          key={`${token.chain}-${token.contractAddress || token.symbol}-${idx}`}
-                          value={`${token.chain}-${token.contractAddress || token.symbol}`}
-                          disabled={!!(fromToken && token.chain === fromToken.chain && token.contractAddress === fromToken.contractAddress)}
-                        >
-                          {token.symbol} ({token.chain})
-                        </option>
-                      ))}
-                  </select>
-
-                  {/* Selected Token Info */}
-                  {toToken && (
-                    <div className="flex items-center gap-2 p-2 bg-muted/50 rounded-lg">
-                      <div className="w-8 h-8 rounded-full bg-background flex items-center justify-center overflow-hidden flex-shrink-0">
-                        {getTokenIcon(toToken)}
-                      </div>
-                      <div className="flex-1 min-w-0">
+                <div className="space-y-2" style={{ overflow: 'visible' }}>
+                  {/* Custom Dropdown */}
+                  <div className="relative" ref={toDropdownRef} style={{ zIndex: 50 }}>
+                    <button
+                      type="button"
+                      onClick={() => fromToken && setIsToDropdownOpen(!isToDropdownOpen)}
+                      disabled={!fromToken}
+                      className={`w-full p-3 border border-border rounded-lg flex items-center justify-between transition-colors ${
+                        !fromToken ? 'opacity-50 cursor-not-allowed' : 'hover:bg-accent/50'
+                      }`}
+                    >
+                      {toToken ? (
                         <div className="flex items-center gap-2">
-                          <span className="text-sm font-medium">{toToken.symbol}</span>
-                          <span className="text-xs px-1.5 py-0.5 rounded bg-muted text-muted-foreground uppercase font-mono">
-                            {toToken.chain}
-                          </span>
+                          <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center overflow-hidden">
+                            {getTokenIcon(toToken) ? (
+                              <img src={getTokenIcon(toToken)!} alt={toToken.symbol} className="w-full h-full object-cover" />
+                            ) : (
+                              <span className="text-sm font-bold text-muted-foreground uppercase">{toToken.symbol.charAt(0)}</span>
+                            )}
+                          </div>
+                          <div className="text-left">
+                            <p className="text-sm font-medium">{toToken.symbol}</p>
+                            <p className="text-xs text-muted-foreground">{toToken.chain.toUpperCase()}</p>
+                          </div>
                         </div>
-                        <span className="text-xs text-muted-foreground">
-                          Balance: {toToken.balanceFormatted}
-                        </span>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Estimated Amount */}
-                  {toToken && (
-                    <div className="relative">
-                      <input
-                        type="text"
-                        value={isLoadingPrice ? 'Calculating...' : toAmount}
-                        readOnly
-                        placeholder="0.0"
-                        className="w-full bg-muted border border-border rounded-lg p-3 text-sm focus:outline-none cursor-not-allowed"
-                      />
-                      {isLoadingPrice && (
-                        <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground" />
+                      ) : (
+                        <span className="text-muted-foreground">Select a token...</span>
                       )}
-                    </div>
-                  )}
+                      <svg className="w-4 h-4 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </button>
+
+                    {/* Dropdown Menu */}
+                    {isToDropdownOpen && fromToken && (
+                      <div className="absolute z-50 w-full mt-1 bg-popover border border-border rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                        {swapSupportedTokens
+                          .filter(t => t.chain === fromToken.chain) // Only show tokens on the same chain as fromToken
+                          .filter(t => (t.contractAddress || t.symbol) !== (fromToken.contractAddress || fromToken.symbol)) // Hide the same token as fromToken
+                          .map((token, index) => {
+                            return (
+                              <button
+                                key={`${token.chain}-${token.contractAddress || token.symbol}-${index}`}
+                                type="button"
+                                onClick={() => {
+                                  setToToken(token);
+                                  setToAmount('');
+                                  setIsToDropdownOpen(false);
+                                }}
+                                className={`w-full p-3 flex items-center justify-between hover:bg-accent transition-colors ${
+                                  toToken === token ? 'bg-accent' : ''
+                                }`}
+                              >
+                                <div className="flex items-center gap-2">
+                                  <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center overflow-hidden">
+                                    {getTokenIcon(token) ? (
+                                      <img src={getTokenIcon(token)!} alt={token.symbol} className="w-full h-full object-cover" />
+                                    ) : (
+                                      <span className="text-sm font-bold text-muted-foreground uppercase">{token.symbol.charAt(0)}</span>
+                                    )}
+                                  </div>
+                                  <div className="text-left">
+                                    <p className="text-sm font-medium">{token.symbol}</p>
+                                    <p className="text-xs text-muted-foreground">{token.chain.toUpperCase()}</p>
+                                  </div>
+                                </div>
+                                <div className="text-right">
+                                  <p className="text-sm font-mono">{parseFloat(token.balanceFormatted).toFixed(6)}</p>
+                                  <p className="text-xs text-muted-foreground">${token.usdValue?.toFixed(2) || '0.00'}</p>
+                                </div>
+                              </button>
+                            );
+                          })}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Estimated Amount - Always visible */}
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={isLoadingPrice ? 'Calculating...' : toAmount}
+                      readOnly
+                      placeholder="0.0"
+                      disabled={!toToken}
+                      className={`w-full bg-muted border border-border rounded-lg p-3 text-sm focus:outline-none cursor-not-allowed ${
+                        !toToken ? 'opacity-50' : ''
+                      }`}
+                    />
+                    {isLoadingPrice && (
+                      <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground" />
+                    )}
+                  </div>
                 </div>
               </div>
 
               {/* Slippage Tolerance */}
-              <div className="space-y-2">
+              <div className="space-y-2 mt-2">
                 <label className="text-xs text-muted-foreground">Slippage Tolerance (%)</label>
                 <div className="flex gap-2">
                   {['0.5', '1', '2'].map((value) => (
@@ -521,7 +593,7 @@ export function SwapModal({ isOpen, onClose, tokens, userId, onSuccess }: SwapMo
                   )}
                 </Button>
               </div>
-            </>
+            </div>
           )}
         </div>
       </div>

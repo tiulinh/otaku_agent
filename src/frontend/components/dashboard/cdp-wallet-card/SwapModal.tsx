@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { Button } from '../../ui/button';
 import { X, ArrowDownUp, Loader2 } from 'lucide-react';
 import { elizaClient } from '../../../lib/elizaClient';
-import { getTokenIconBySymbol } from '../../../constants/chains';
+import { getTokenIconBySymbol, getTxExplorerUrl } from '../../../constants/chains';
 
 interface Token {
   symbol: string;
@@ -402,9 +402,9 @@ export function SwapModal({ isOpen, onClose, tokens, userId, onSuccess }: SwapMo
                 </div>
                 <div className="text-center">
                   <p className="font-medium text-green-500">Swap Successful!</p>
-                  {txHash && (
+                  {txHash && fromToken?.chain && (
                     <a 
-                      href={`https://${fromToken?.chain === 'base' ? 'basescan.org' : 'etherscan.io'}/tx/${txHash}`}
+                      href={getTxExplorerUrl(fromToken.chain, txHash) || '#'}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="text-xs text-muted-foreground hover:text-foreground mt-1 inline-block"

@@ -10,7 +10,7 @@ import { Bot, Loader2 } from "lucide-react"
 import { Bullet } from "@/components/ui/bullet"
 import { cn } from "@/lib/utils"
 import ArrowRightIcon from "@/components/icons/arrow-right"
-import { Response } from "@/components/chat/response"
+import { AnimatedResponse } from "@/components/chat/animated-response"
 
 // Quick start prompts for new conversations (static fallback)
 const DEFAULT_QUICK_PROMPTS = [
@@ -47,6 +47,7 @@ export function ChatInterface({ agent, userId, serverId, channelId, isNewChatMod
   const [isTyping, setIsTyping] = useState(false)
   const [isCreatingChannel, setIsCreatingChannel] = useState(false)
   const [isLoadingMessages, setIsLoadingMessages] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   // Scroll to bottom when messages change
@@ -137,9 +138,15 @@ export function ChatInterface({ agent, userId, serverId, channelId, isNewChatMod
         return updated.sort((a, b) => a.createdAt - b.createdAt)
       })
       
-      // Stop typing indicator when agent responds
+      // Stop typing indicator when agent responds (including error messages)
       if (newMessage.isAgent) {
         setIsTyping(false)
+        
+        // If it's an error message, also clear the local error state
+        if (newMessage.content.startsWith('⚠️ Error:')) {
+          // The error is already shown in the message, so clear any pending local errors
+          setError(null)
+        }
       }
     }
 
@@ -160,6 +167,9 @@ export function ChatInterface({ agent, userId, serverId, channelId, isNewChatMod
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!inputValue.trim() || isCreatingChannel) return
+    
+    // Clear any previous errors
+    setError(null)
     
     // If in new chat mode, create channel first with generated title
     if (isNewChatMode && !channelId) {
@@ -213,6 +223,8 @@ export function ChatInterface({ agent, userId, serverId, channelId, isNewChatMod
         setInputValue('')
       } catch (error: any) {
         console.error('❌ Failed to create channel:', error)
+        const errorMessage = error?.message || 'Failed to create chat. Please try again.'
+        setError(errorMessage)
         setIsTyping(false)
       } finally {
         setIsCreatingChannel(false)
@@ -248,6 +260,9 @@ export function ChatInterface({ agent, userId, serverId, channelId, isNewChatMod
   // Handle quick prompt click - auto send message
   const handleQuickPrompt = async (message: string) => {
     if (isTyping || !message.trim() || isCreatingChannel) return
+    
+    // Clear any previous errors
+    setError(null)
     
     // If in new chat mode, create channel first with generated title
     if (isNewChatMode && !channelId) {
@@ -297,6 +312,8 @@ export function ChatInterface({ agent, userId, serverId, channelId, isNewChatMod
         }, 100)
       } catch (error: any) {
         console.error('❌ Failed to create channel:', error)
+        const errorMessage = error?.message || 'Failed to create chat. Please try again.'
+        setError(errorMessage)
         setIsTyping(false)
       } finally {
         setIsCreatingChannel(false)
@@ -335,26 +352,46 @@ export function ChatInterface({ agent, userId, serverId, channelId, isNewChatMod
           <div className="space-y-4 h-full flex flex-col">
             {/* Messages */}
             <div className="flex-1 space-y-4">
-              {messages.map((message) => (
-                <div
-                  key={message.id}
-                  className={cn("flex flex-col gap-1", message.isAgent ? "items-start" : "items-end")}
-                >
+              {messages.map((message, index) => {
+                // Only animate the last AI message if it's recent (< 10 seconds old)
+                const isLastMessage = index === messages.length - 1
+                const messageAge = Date.now() - message.createdAt
+                const isRecent = messageAge < 10000 // Less than 10 seconds
+                const shouldAnimate = message.isAgent && isLastMessage && isRecent
+                
+                // Check if this is an error message from the agent
+                const isErrorMessage = message.isAgent && message.content.startsWith('⚠️ Error:')
+
+                return (
                   <div
-                    className={cn(
-                      "max-w-[70%] rounded-lg px-3 py-2 text-sm font-medium",
-                      message.isAgent ? "bg-accent text-foreground" : "bg-primary text-primary-foreground",
-                    )}
+                    key={message.id}
+                    className={cn("flex flex-col gap-1", message.isAgent ? "items-start" : "items-end")}
                   >
-                    <Response className="[&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
-                      {message.content}
-                    </Response>
-                    <span className="text-xs opacity-50 mt-1 block">
-                      {new Date(message.createdAt).toLocaleTimeString()}
-                    </span>
+                    <div
+                      className={cn(
+                        "max-w-[70%] rounded-lg px-3 py-2 text-sm font-medium",
+                        isErrorMessage 
+                          ? "bg-destructive/10 border border-destructive/20 text-destructive"
+                          : message.isAgent 
+                            ? "bg-accent text-foreground" 
+                            : "bg-primary text-primary-foreground",
+                      )}
+                    >
+                      <AnimatedResponse 
+                        className="[&>*:first-child]:mt-0 [&>*:last-child]:mb-0"
+                        shouldAnimate={shouldAnimate && !isErrorMessage}
+                        messageId={message.id}
+                        maxDurationMs={10000}
+                      >
+                        {message.content}
+                      </AnimatedResponse>
+                      <span className="text-xs opacity-50 mt-1 block">
+                        {new Date(message.createdAt).toLocaleTimeString()}
+                      </span>
+                    </div>
                   </div>
-                </div>
-              ))}
+                )
+              })}
               {isTyping && (
                 <div className="flex flex-col gap-1 items-start">
                   <div className="max-w-[70%] rounded-lg px-3 py-2 bg-accent text-foreground">
@@ -362,14 +399,32 @@ export function ChatInterface({ agent, userId, serverId, channelId, isNewChatMod
                   </div>
                 </div>
               )}
+              
+              {/* Error Message */}
+              {error && (
+                <div className="flex flex-col gap-1 items-center">
+                  <div className="max-w-[90%] rounded-lg px-4 py-3 bg-destructive/10 border border-destructive/20 text-destructive">
+                    <div className="flex items-start gap-2">
+                      <span className="text-sm font-medium">⚠️ {error}</span>
+                    </div>
+                    <button
+                      onClick={() => setError(null)}
+                      className="mt-2 text-xs underline hover:no-underline"
+                    >
+                      Dismiss
+                    </button>
+                  </div>
+                </div>
+              )}
+              
               <div ref={messagesEndRef} />
             </div>
 
-            {/* Quick Prompts - Only show when no messages and not creating/typing */}
+            {/* Quick Prompts - Only show when no messages and not creating/typing (show if error) */}
             {messages.length === 0 && !isCreatingChannel && !isTyping && !isLoadingMessages && (
               <div className="pt-4 border-t border-border">
                 <p className="text-xs uppercase tracking-wider text-muted-foreground mb-3 font-mono">
-                  Quick Start
+                  {error ? 'Try Again' : 'Quick Start'}
                 </p>
                 <div className="flex flex-wrap gap-2">
                   {DEFAULT_QUICK_PROMPTS.map((prompt, index) => (

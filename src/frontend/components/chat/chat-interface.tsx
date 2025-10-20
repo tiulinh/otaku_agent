@@ -45,6 +45,7 @@ export function ChatInterface({ agent, userId, serverId, channelId, isNewChatMod
   const [inputValue, setInputValue] = useState("")
   const [isTyping, setIsTyping] = useState(false)
   const [isCreatingChannel, setIsCreatingChannel] = useState(false)
+  const [isLoadingMessages, setIsLoadingMessages] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   // Scroll to bottom when messages change
@@ -66,6 +67,7 @@ export function ChatInterface({ agent, userId, serverId, channelId, isNewChatMod
 
     async function loadMessages() {
       try {
+        setIsLoadingMessages(true)
         console.log('📨 Loading messages for channel:', channelId)
         const messagesResponse = await elizaClient.messaging.getChannelMessages(channelId as UUID, {
           limit: 50,
@@ -95,9 +97,12 @@ export function ChatInterface({ agent, userId, serverId, channelId, isNewChatMod
 
         const sortedMessages = formattedMessages.sort((a, b) => a.createdAt - b.createdAt)
         setMessages(sortedMessages)
+        setIsLoadingMessages(false)
         console.log(`✅ Loaded ${sortedMessages.length} messages`)
       } catch (error: any) {
         console.error('❌ Failed to load messages:', error)
+      } finally {
+        setIsLoadingMessages(false)
       }
     }
 
@@ -360,7 +365,7 @@ export function ChatInterface({ agent, userId, serverId, channelId, isNewChatMod
             </div>
 
             {/* Quick Prompts - Only show when no messages and not creating/typing */}
-            {messages.length === 0 && !isCreatingChannel && !isTyping && (
+            {messages.length === 0 && !isCreatingChannel && !isTyping && !isLoadingMessages && (
               <div className="pt-4 border-t border-border">
                 <p className="text-xs uppercase tracking-wider text-muted-foreground mb-3 font-mono">
                   Quick Start

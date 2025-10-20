@@ -565,6 +565,13 @@ export class MessageBusService extends Service {
         `[${this.runtime.character.name}] MessageBusService: Error processing incoming message:`,
         error instanceof Error ? error.message : String(error)
       );
+      
+      // Send error message back to the user so they know something went wrong
+      await this.sendErrorResponseToBus(
+        message.channel_id,
+        message.server_id,
+        error instanceof Error ? error.message : 'Failed to process message'
+      );
     }
   }
 
@@ -731,6 +738,56 @@ export class MessageBusService extends Service {
     } catch (error) {
       logger.error(
         `[${this.runtime.character.name}] MessageBusService: Error sending agent response to bus:`,
+        error instanceof Error ? error.message : String(error)
+      );
+    }
+  }
+
+  private async sendErrorResponseToBus(channelId: UUID, serverId: UUID, errorMessage: string) {
+    try {
+      logger.info(
+        `[${this.runtime.character.name}] MessageBusService: Sending error response to channel ${channelId}`
+      );
+
+      const payloadToServer = {
+        channel_id: channelId,
+        server_id: serverId,
+        author_id: this.runtime.agentId,
+        content: `⚠️ Error: ${errorMessage}`,
+        source_type: 'agent_error',
+        raw_message: {
+          error: errorMessage,
+          type: 'processing_error',
+        },
+        metadata: {
+          agent_id: this.runtime.agentId,
+          agentName: this.runtime.character.name,
+          isError: true,
+        },
+      };
+
+      const baseUrl = this.getCentralMessageServerUrl();
+      const submitUrl = new URL('/api/messaging/submit', baseUrl);
+      const serverApiUrl = submitUrl.toString();
+      
+      const response = await fetch(serverApiUrl, {
+        method: 'POST',
+        headers: this.getAuthHeaders(),
+        body: JSON.stringify(payloadToServer),
+      });
+
+      if (!response.ok) {
+        logger.error(
+          `[${this.runtime.character.name}] MessageBusService: Error sending error response to central server: ${response.status} ${await response.text()}`
+        );
+      } else {
+        logger.info(
+          `[${this.runtime.character.name}] MessageBusService: Successfully sent error response to user`
+        );
+      }
+    } catch (error) {
+      logger.error(
+        `[${this.runtime.character.name}] MessageBusService: Error sending error response to bus:`,
         error instanceof Error ? error.message : String(error)
       );
     }

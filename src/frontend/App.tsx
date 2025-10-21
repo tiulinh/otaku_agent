@@ -22,65 +22,48 @@ import { UUID } from '@elizaos/core';
 const mockData = mockDataJson as MockData;
 
 /**
- * Generate a deterministic UUID from a wallet address
- * This ensures the same wallet always gets the same UUID
+ * Authenticate with backend and get JWT token
+ * Uses CDP's userId as the primary identifier
+ * 
+ * @param email User's email from CDP authentication
+ * @param currentUser CDP currentUser object (to extract userId)
  */
-async function generateDeterministicUUID(walletAddress: string): Promise<string> {
-  // Hash the wallet address to get deterministic bytes
-  const encoder = new TextEncoder();
-  const data = encoder.encode(walletAddress.toLowerCase());
-  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-  const hashArray = new Uint8Array(hashBuffer);
-  
-  // Take first 16 bytes for UUID (128 bits)
-  const uuidBytes = hashArray.slice(0, 16);
-  
-  // Set version (4) and variant bits for UUID v4 format
-  uuidBytes[6] = (uuidBytes[6] & 0x0f) | 0x40; // Version 4
-  uuidBytes[8] = (uuidBytes[8] & 0x3f) | 0x80; // Variant 10
-  
-  // Convert to UUID string format
-  const hex = Array.from(uuidBytes)
-    .map(b => b.toString(16).padStart(2, '0'))
-    .join('');
-  
-  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
-}
-
-/**
- * Get or generate user ID
- * - If CDP wallet is connected: Use deterministic UUID based on wallet address
- * - If not connected: Use random UUID stored in localStorage
- */
-async function getUserId(walletAddress?: string): Promise<string> {
-  // If wallet address is provided, generate deterministic UUID
-  if (walletAddress) {
-    const storageKey = `eliza-wallet-user-id-${walletAddress.toLowerCase()}`;
-    const existingId = localStorage.getItem(storageKey);
+async function authenticateUser(
+  email: string, 
+  currentUser?: any
+): Promise<{ userId: string; token: string }> {
+  try {
+    console.log('🔐 Authenticating with backend...');
     
-    if (existingId) {
-      return existingId;
+    // Extract CDP userId
+    const cdpUserId = currentUser?.userId;
+    
+    if (!cdpUserId) {
+      throw new Error('CDP userId not available - user may not be authenticated with CDP');
     }
     
-    // Generate new deterministic UUID from wallet address
-    const userId = await generateDeterministicUUID(walletAddress);
-    localStorage.setItem(storageKey, userId);
-    console.log(`Generated deterministic user ID for wallet ${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}: ${userId}`);
-    return userId;
+    console.log('📝 CDP User ID:', cdpUserId);
+    
+    // Login with backend - send email and CDP userId
+    const { token, userId } = await elizaClient.auth.login({
+      email,
+      cdpUserId, // Use CDP's userId directly
+    });
+    
+    console.log('✅ Authentication successful');
+    console.log('📝 Backend confirmed userId:', userId);
+    
+    // Store token in localStorage
+    localStorage.setItem('auth-token', token);
+    
+    // Set token for all API calls
+    elizaClient.setAuthToken(token);
+    
+    return { userId, token };
+  } catch (error) {
+    console.error('❌ Authentication failed:', error);
+    throw error;
   }
-  
-  // Fallback to random UUID for non-wallet users
-  const storageKey = 'eliza-user-id';
-  const existingId = localStorage.getItem(storageKey);
-  
-  if (existingId) {
-    return existingId;
-  }
-  
-  const userId = crypto.randomUUID();
-  localStorage.setItem(storageKey, userId);
-  console.log(`Generated random user ID: ${userId}`);
-  return userId;
 }
 
 interface Channel {
@@ -92,7 +75,12 @@ interface Channel {
 
 function App() {
   // Get CDP wallet info (will be undefined if not configured or not signed in)
-  const { isInitialized, isSignedIn, userEmail, signOut } = useCDPWallet();
+  const { isInitialized, isSignedIn, userEmail, signOut, currentUser } = useCDPWallet();
+  // TEMPORARY FOR TESTING - Comment out when CDP is configured
+  // const isInitialized = true;
+  // const isSignedIn = true;
+  // const userEmail = "tcm390@nyu.edu"
+  // const signOut = () => {}
   
   const { showLoading, hide } = useLoadingPanel();
   const [userId, setUserId] = useState<string | null>(null);
@@ -145,39 +133,41 @@ function App() {
     }
   }, [loadingMessage, currentView, userId, connected, isLoadingChannels, activeChannelId, isNewChatMode, showLoading, hide]);
 
-  // Initialize or update user ID when wallet address changes
-  // Wait for CDP to initialize before generating user ID
+  // Initialize authentication when CDP sign-in completes
+  // SECURITY: User ID is now generated server-side with JWT authentication
   useEffect(() => {
-    // If CDP is not configured, initialize immediately
+    // If CDP is not configured, show error (authentication required)
     if (!import.meta.env.VITE_CDP_PROJECT_ID) {
-      async function initUserId() {
-        const id = await getUserId(undefined);
-        setUserId(id);
-      }
-      initUserId();
+      console.error('❌ CDP_PROJECT_ID not configured - authentication unavailable');
       return;
     }
 
-    // If CDP is configured, wait for it to initialize
+    // Wait for CDP to initialize
     if (!isInitialized) {
       console.log('⏳ Waiting for CDP wallet to initialize...');
       return;
     }
 
-    // If CDP is initialized but user is not signed in, clear userId to show modal
-    if (!isSignedIn) {
+    // If user is not signed in, clear state and show sign-in modal
+    if (!isSignedIn || !userEmail) {
       console.log('🚫 User not signed in, waiting for authentication...');
       setUserId(null);
+      elizaClient.clearAuthToken();
       return;
     }
 
-    // User is signed in, generate userId from email address
-    async function initUserId() {
-      const id = await getUserId(userEmail || undefined);
-      setUserId(id);
+    // User is signed in with CDP, authenticate with backend
+    async function initAuth() {
+      try {
+        const { userId, token } = await authenticateUser(userEmail, currentUser);
+        setUserId(userId);
+      } catch (error) {
+        console.error('❌ Failed to authenticate:', error);
+        setUserId(null);
+      }
     }
-    initUserId();
-  }, [isInitialized, isSignedIn, userEmail]); // Re-run when CDP state changes
+    initAuth();
+  }, [isInitialized, isSignedIn, userEmail, currentUser]); // Re-run when CDP state changes
 
   // Fetch the agent list first to get the ID
   const { data: agentsData } = useQuery({

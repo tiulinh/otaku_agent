@@ -3,6 +3,7 @@ import { logger } from '@elizaos/core';
 import { CdpClient } from '@coinbase/cdp-sdk';
 import type { AgentServer } from '../../index';
 import { sendError, sendSuccess } from '../shared/response-utils';
+import { requireAuth, type AuthenticatedRequest } from '../../utils/auth';
 import { createWalletClient, http } from 'viem';
 import { toAccount } from 'viem/accounts';
 import {
@@ -1074,7 +1075,11 @@ async function fetchWalletNFTs(client: CdpClient, name: string): Promise<{
 export function cdpRouter(_serverInstance: AgentServer): express.Router {
   const router = express.Router();
 
-    // Cache for wallet tokens and NFTs
+  // SECURITY: Require authentication for all CDP wallet operations
+  // This ensures users can only access their own wallets
+  router.use(requireAuth);
+
+  // Cache for wallet tokens and NFTs
   interface CacheEntry<T> {
     data: T;
     timestamp: number;
@@ -1086,31 +1091,29 @@ export function cdpRouter(_serverInstance: AgentServer): express.Router {
 
   /**
    * POST /api/cdp/wallet
-   * Get or create server wallet for a user
+   * Get or create server wallet for authenticated user
+   * SECURITY: Uses userId from JWT token, not from request body
    */
-  router.post('/wallet', async (req, res) => {
+  router.post('/wallet', async (req: AuthenticatedRequest, res) => {
     try {
-      const { name } = req.body;
-
-      if (!name || typeof name !== 'string') {
-        return sendError(res, 400, 'INVALID_REQUEST', 'Name is required and must be a string');
-      }
+      // SECURITY: Use userId from authenticated token, NOT from request body
+      const userId = req.userId!;
 
       const client = getCdpClient();
       if (!client) {
         return sendError(res, 503, 'SERVICE_UNAVAILABLE', 'CDP client not initialized. Check environment variables.');
       }
 
-      logger.info(`[CDP API] Getting/creating wallet for user: ${name}`);
+      logger.info(`[CDP API] Getting/creating wallet for authenticated user: ${userId.substring(0, 8)}...`);
 
-      const account = await client.evm.getOrCreateAccount({ name });
+      const account = await client.evm.getOrCreateAccount({ name: userId });
       const address = account.address;
 
-      logger.info(`[CDP API] Wallet ready: ${address} (user: ${name})`);
+      logger.info(`[CDP API] Wallet ready: ${address}`);
 
       sendSuccess(res, {
         address,
-        accountName: name,
+        accountName: userId,
       });
     } catch (error) {
       logger.error(
@@ -1129,20 +1132,23 @@ export function cdpRouter(_serverInstance: AgentServer): express.Router {
 
   /**
    * GET /api/cdp/wallet/tokens/:name
-   * Get token balances across all networks (checks cache first)
+   * Get token balances for authenticated user (checks cache first)
+   * SECURITY: Ignores :name parameter, uses authenticated userId
    */
-  router.get('/wallet/tokens/:name', async (req, res) => {
+  router.get('/wallet/tokens/:name', async (req: AuthenticatedRequest, res) => {
     try {
-      const { name } = req.params;
-
-      if (!name || typeof name !== 'string') {
-        return sendError(res, 400, 'INVALID_REQUEST', 'Name is required');
+      // SECURITY: Use authenticated userId, ignore URL parameter
+      const userId = req.userId!;
+      
+      // Log if someone tries to access a different user's wallet
+      if (req.params.name && req.params.name !== userId) {
+        logger.warn(`[CDP API Security] User ${userId.substring(0, 8)}... attempted to access tokens of ${req.params.name.substring(0, 8)}...`);
       }
 
       // Check cache first
-      const cached = tokensCache.get(name);
+      const cached = tokensCache.get(userId);
       if (cached && (Date.now() - cached.timestamp) < CACHE_TTL) {
-        logger.info(`[CDP API] Returning cached token balances for user: ${name}`);
+        logger.info(`[CDP API] Returning cached token balances for user: ${userId.substring(0, 8)}...`);
         return sendSuccess(res, { ...cached.data, fromCache: true });
       }
 
@@ -1152,10 +1158,10 @@ export function cdpRouter(_serverInstance: AgentServer): express.Router {
       }
 
       // Fetch fresh data
-      const result = await fetchWalletTokens(client, name);
+      const result = await fetchWalletTokens(client, userId);
 
       // Update cache
-      tokensCache.set(name, {
+      tokensCache.set(userId, {
         data: result,
         timestamp: Date.now(),
       });
@@ -1178,14 +1184,16 @@ export function cdpRouter(_serverInstance: AgentServer): express.Router {
 
   /**
    * POST /api/cdp/wallet/tokens/sync/:name
-   * Force sync token balances (bypasses cache)
+   * Force sync token balances for authenticated user (bypasses cache)
+   * SECURITY: Ignores :name parameter, uses authenticated userId
    */
-  router.post('/wallet/tokens/sync/:name', async (req, res) => {
+  router.post('/wallet/tokens/sync/:name', async (req: AuthenticatedRequest, res) => {
     try {
-      const { name } = req.params;
-
-      if (!name || typeof name !== 'string') {
-        return sendError(res, 400, 'INVALID_REQUEST', 'Name is required');
+      // SECURITY: Use authenticated userId, ignore URL parameter
+      const userId = req.userId!;
+      
+      if (req.params.name && req.params.name !== userId) {
+        logger.warn(`[CDP API Security] User ${userId.substring(0, 8)}... attempted to sync tokens of ${req.params.name.substring(0, 8)}...`);
       }
 
       const client = getCdpClient();
@@ -1193,13 +1201,13 @@ export function cdpRouter(_serverInstance: AgentServer): express.Router {
         return sendError(res, 503, 'SERVICE_UNAVAILABLE', 'CDP client not initialized.');
       }
 
-      logger.info(`[CDP API] Force syncing token balances for user: ${name}`);
+      logger.info(`[CDP API] Force syncing token balances for user: ${userId.substring(0, 8)}...`);
 
       // Fetch fresh data
-      const result = await fetchWalletTokens(client, name);
+      const result = await fetchWalletTokens(client, userId);
 
       // Update cache
-      tokensCache.set(name, {
+      tokensCache.set(userId, {
         data: result,
         timestamp: Date.now(),
       });
@@ -1222,20 +1230,23 @@ export function cdpRouter(_serverInstance: AgentServer): express.Router {
 
   /**
    * GET /api/cdp/wallet/nfts/:name
-   * Get NFT holdings across networks (checks cache first)
+   * Get NFT holdings for authenticated user (checks cache first)
+   * SECURITY: Ignores :name parameter, uses authenticated userId
    */
-  router.get('/wallet/nfts/:name', async (req, res) => {
+  router.get('/wallet/nfts/:name', async (req: AuthenticatedRequest, res) => {
     try {
-      const { name } = req.params;
-
-      if (!name || typeof name !== 'string') {
-        return sendError(res, 400, 'INVALID_REQUEST', 'Name is required');
+      // SECURITY: Use authenticated userId, ignore URL parameter
+      const userId = req.userId!;
+      
+      // Log if someone tries to access a different user's NFTs
+      if (req.params.name && req.params.name !== userId) {
+        logger.warn(`[CDP API Security] User ${userId.substring(0, 8)}... attempted to access NFTs of ${req.params.name.substring(0, 8)}...`);
       }
 
       // Check cache first
-      const cached = nftsCache.get(name);
+      const cached = nftsCache.get(userId);
       if (cached && (Date.now() - cached.timestamp) < CACHE_TTL) {
-        logger.info(`[CDP API] Returning cached NFTs for user: ${name}`);
+        logger.info(`[CDP API] Returning cached NFTs for user: ${userId.substring(0, 8)}...`);
         return sendSuccess(res, { ...cached.data, fromCache: true });
       }
 
@@ -1245,10 +1256,10 @@ export function cdpRouter(_serverInstance: AgentServer): express.Router {
       }
 
       // Fetch fresh data
-      const result = await fetchWalletNFTs(client, name);
+      const result = await fetchWalletNFTs(client, userId);
 
       // Update cache
-      nftsCache.set(name, {
+      nftsCache.set(userId, {
         data: result,
         timestamp: Date.now(),
       });
@@ -1271,14 +1282,16 @@ export function cdpRouter(_serverInstance: AgentServer): express.Router {
 
   /**
    * POST /api/cdp/wallet/nfts/sync/:name
-   * Force sync NFTs (bypasses cache)
+   * Force sync NFTs for authenticated user (bypasses cache)
+   * SECURITY: Ignores :name parameter, uses authenticated userId
    */
-  router.post('/wallet/nfts/sync/:name', async (req, res) => {
+  router.post('/wallet/nfts/sync/:name', async (req: AuthenticatedRequest, res) => {
     try {
-      const { name } = req.params;
-
-      if (!name || typeof name !== 'string') {
-        return sendError(res, 400, 'INVALID_REQUEST', 'Name is required');
+      // SECURITY: Use authenticated userId, ignore URL parameter
+      const userId = req.userId!;
+      
+      if (req.params.name && req.params.name !== userId) {
+        logger.warn(`[CDP API Security] User ${userId.substring(0, 8)}... attempted to sync NFTs of ${req.params.name.substring(0, 8)}...`);
       }
 
       const client = getCdpClient();
@@ -1286,13 +1299,13 @@ export function cdpRouter(_serverInstance: AgentServer): express.Router {
         return sendError(res, 503, 'SERVICE_UNAVAILABLE', 'CDP client not initialized.');
       }
 
-      logger.info(`[CDP API] Force syncing NFTs for user: ${name}`);
+      logger.info(`[CDP API] Force syncing NFTs for user: ${userId.substring(0, 8)}...`);
 
       // Fetch fresh data
-      const result = await fetchWalletNFTs(client, name);
+      const result = await fetchWalletNFTs(client, userId);
 
       // Update cache
-      nftsCache.set(name, {
+      nftsCache.set(userId, {
         data: result,
         timestamp: Date.now(),
       });
@@ -1315,14 +1328,16 @@ export function cdpRouter(_serverInstance: AgentServer): express.Router {
 
   /**
    * GET /api/cdp/wallet/history/:name
-   * Get transaction history across networks using Alchemy API
+   * Get transaction history for authenticated user across networks using Alchemy API
+   * SECURITY: Ignores :name parameter, uses authenticated userId
    */
-  router.get('/wallet/history/:name', async (req, res) => {
+  router.get('/wallet/history/:name', async (req: AuthenticatedRequest, res) => {
     try {
-      const { name } = req.params;
-
-      if (!name || typeof name !== 'string') {
-        return sendError(res, 400, 'INVALID_REQUEST', 'Name is required');
+      // SECURITY: Use authenticated userId, ignore URL parameter
+      const userId = req.userId!;
+      
+      if (req.params.name && req.params.name !== userId) {
+        logger.warn(`[CDP API Security] User ${userId.substring(0, 8)}... attempted to access history of ${req.params.name.substring(0, 8)}...`);
       }
 
       const client = getCdpClient();
@@ -1335,9 +1350,9 @@ export function cdpRouter(_serverInstance: AgentServer): express.Router {
         return sendError(res, 503, 'SERVICE_UNAVAILABLE', 'Alchemy API key not configured');
       }
 
-      logger.info(`[CDP API] Fetching transaction history for user: ${name}`);
+      logger.info(`[CDP API] Fetching transaction history for user: ${userId.substring(0, 8)}...`);
 
-      const account = await client.evm.getOrCreateAccount({ name });
+      const account = await client.evm.getOrCreateAccount({ name: userId });
       const address = account.address;
 
       // Fetch transactions from all mainnet networks
@@ -1451,7 +1466,7 @@ export function cdpRouter(_serverInstance: AgentServer): express.Router {
       // Sort by timestamp descending (most recent first)
       allTransactions.sort((a, b) => b.timestamp - a.timestamp);
 
-      logger.info(`[CDP API] Found ${allTransactions.length} transactions for user ${name}`);
+      logger.info(`[CDP API] Found ${allTransactions.length} transactions for user ${userId.substring(0, 8)}...`);
 
       sendSuccess(res, {
         transactions: allTransactions,
@@ -1474,14 +1489,23 @@ export function cdpRouter(_serverInstance: AgentServer): express.Router {
 
   /**
    * POST /api/cdp/wallet/send
-   * Send tokens from server wallet with fallback to viem
+   * Send tokens from authenticated user's server wallet
+   * SECURITY: Uses userId from JWT token, not from request body
    */
-  router.post('/wallet/send', async (req, res) => {
+  router.post('/wallet/send', async (req: AuthenticatedRequest, res) => {
     try {
-      const { name, network, to, token, amount } = req.body;
+      // SECURITY: Use authenticated userId, NOT from request body
+      const userId = req.userId!;
+      const { network, to, token, amount } = req.body;
+      
+      // Log if name is provided and doesn't match (attempted impersonation)
+      if (req.body.name && req.body.name !== userId) {
+        logger.warn(`[CDP API Security] User ${userId.substring(0, 8)}... attempted to send from wallet ${req.body.name.substring(0, 8)}...`);
+        return sendError(res, 403, 'FORBIDDEN', 'You can only send from your own wallet');
+      }
 
-      if (!name || !network || !to || !token || !amount) {
-        return sendError(res, 400, 'INVALID_REQUEST', 'Missing required fields: name, network, to, token, amount');
+      if (!network || !to || !token || !amount) {
+        return sendError(res, 400, 'INVALID_REQUEST', 'Missing required fields: network, to, token, amount');
       }
 
       const client = getCdpClient();
@@ -1489,7 +1513,7 @@ export function cdpRouter(_serverInstance: AgentServer): express.Router {
         return sendError(res, 503, 'SERVICE_UNAVAILABLE', 'CDP client not initialized.');
       }
 
-      logger.info(`[CDP API] Sending ${amount} ${token} to ${to} on ${network} for user ${name}`);
+      logger.info(`[CDP API] Authenticated user ${userId.substring(0, 8)}... sending ${amount} ${token} to ${to} on ${network}`);
 
       // Try CDP SDK first
       let cdpSuccess = false;
@@ -1498,7 +1522,7 @@ export function cdpRouter(_serverInstance: AgentServer): express.Router {
 
       try {
         logger.info(`[CDP API] Attempting transfer with CDP SDK...`);
-        const account = await client.evm.getOrCreateAccount({ name });
+        const account = await client.evm.getOrCreateAccount({ name: userId });
         const networkAccount = await account.useNetwork(network);
         fromAddress = account.address;
 
@@ -1530,8 +1554,8 @@ export function cdpRouter(_serverInstance: AgentServer): express.Router {
           throw new Error(`Unsupported network: ${network}`);
         }
 
-        // Get wallet from CDP
-        const account = await client.evm.getOrCreateAccount({ name });
+        // Get wallet from CDP (using authenticated userId)
+        const account = await client.evm.getOrCreateAccount({ name: userId });
         fromAddress = account.address;
 
         // Get Alchemy key for RPC
@@ -1625,14 +1649,23 @@ export function cdpRouter(_serverInstance: AgentServer): express.Router {
 
   /**
    * POST /api/cdp/wallet/send-nft
-   * Send NFT from server wallet using viem
+   * Send NFT from authenticated user's server wallet
+   * SECURITY: Uses userId from JWT token, not from request body
    */
-  router.post('/wallet/send-nft', async (req, res) => {
+  router.post('/wallet/send-nft', async (req: AuthenticatedRequest, res) => {
     try {
-      const { name, network, to, contractAddress, tokenId } = req.body;
+      // SECURITY: Use authenticated userId, NOT from request body
+      const userId = req.userId!;
+      const { network, to, contractAddress, tokenId } = req.body;
+      
+      // Log if name is provided and doesn't match (attempted impersonation)
+      if (req.body.name && req.body.name !== userId) {
+        logger.warn(`[CDP API Security] User ${userId.substring(0, 8)}... attempted to send NFT from wallet ${req.body.name.substring(0, 8)}...`);
+        return sendError(res, 403, 'FORBIDDEN', 'You can only send NFTs from your own wallet');
+      }
 
-      if (!name || !network || !to || !contractAddress || !tokenId) {
-        return sendError(res, 400, 'INVALID_REQUEST', 'Missing required fields: name, network, to, contractAddress, tokenId');
+      if (!network || !to || !contractAddress || !tokenId) {
+        return sendError(res, 400, 'INVALID_REQUEST', 'Missing required fields: network, to, contractAddress, tokenId');
       }
 
       const client = getCdpClient();
@@ -1640,9 +1673,9 @@ export function cdpRouter(_serverInstance: AgentServer): express.Router {
         return sendError(res, 503, 'SERVICE_UNAVAILABLE', 'CDP client not initialized.');
       }
 
-      logger.info(`[CDP API] Sending NFT ${contractAddress}:${tokenId} to ${to} on ${network} for user ${name}`);
+      logger.info(`[CDP API] Authenticated user ${userId.substring(0, 8)}... sending NFT ${contractAddress}:${tokenId} to ${to} on ${network}`);
 
-      const account = await client.evm.getOrCreateAccount({ name });
+      const account = await client.evm.getOrCreateAccount({ name: userId });
       
       // Use viem to send the NFT transaction
       const { createWalletClient, createPublicClient, http } = await import('viem');
@@ -1727,15 +1760,22 @@ export function cdpRouter(_serverInstance: AgentServer): express.Router {
 
   /**
    * POST /api/cdp/wallet/swap-price
-   * Get swap price estimate (CDP SDK only for supported networks)
-   * Non-CDP networks: price estimation not available, will execute swap directly
+   * Get swap price estimate for authenticated user
+   * SECURITY: Uses userId from JWT token, not from request body
    */
-  router.post('/wallet/swap-price', async (req, res) => {
+  router.post('/wallet/swap-price', async (req: AuthenticatedRequest, res) => {
     try {
-      const { name, network, fromToken, toToken, fromAmount } = req.body;
+      // SECURITY: Use authenticated userId, NOT from request body
+      const userId = req.userId!;
+      const { network, fromToken, toToken, fromAmount } = req.body;
+      
+      // Log if name is provided and doesn't match
+      if (req.body.name && req.body.name !== userId) {
+        logger.warn(`[CDP API Security] User ${userId.substring(0, 8)}... attempted to get swap price for wallet ${req.body.name.substring(0, 8)}...`);
+      }
 
-      if (!name || !network || !fromToken || !toToken || !fromAmount) {
-        return sendError(res, 400, 'INVALID_REQUEST', 'Missing required fields: name, network, fromToken, toToken, fromAmount');
+      if (!network || !fromToken || !toToken || !fromAmount) {
+        return sendError(res, 400, 'INVALID_REQUEST', 'Missing required fields: network, fromToken, toToken, fromAmount');
       }
 
       const client = getCdpClient();
@@ -1743,9 +1783,9 @@ export function cdpRouter(_serverInstance: AgentServer): express.Router {
         return sendError(res, 503, 'SERVICE_UNAVAILABLE', 'CDP client not initialized.');
       }
 
-      logger.info(`[CDP API] Getting swap price for ${fromAmount} ${fromToken} to ${toToken} on ${network} for user ${name}`);
+      logger.info(`[CDP API] Getting swap price for authenticated user ${userId.substring(0, 8)}...: ${fromAmount} ${fromToken} to ${toToken} on ${network}`);
 
-      const account = await client.evm.getOrCreateAccount({ name });
+      const account = await client.evm.getOrCreateAccount({ name: userId });
 
       // Normalize token addresses (convert native token symbols to NATIVE_TOKEN_ADDRESS)
       const normalizedFromToken = normalizeTokenAddress(fromToken);
@@ -1889,14 +1929,23 @@ export function cdpRouter(_serverInstance: AgentServer): express.Router {
 
   /**
    * POST /api/cdp/wallet/swap
-   * Execute token swap (CDP SDK with viem fallback, or Uniswap V3 for non-CDP networks)
+   * Execute token swap for authenticated user (CDP SDK with viem fallback, or Uniswap V3)
+   * SECURITY: Uses userId from JWT token, not from request body
    */
-  router.post('/wallet/swap', async (req, res) => {
+  router.post('/wallet/swap', async (req: AuthenticatedRequest, res) => {
     try {
-      const { name, network, fromToken, toToken, fromAmount, slippageBps } = req.body;
+      // SECURITY: Use authenticated userId, NOT from request body
+      const userId = req.userId!;
+      const { network, fromToken, toToken, fromAmount, slippageBps } = req.body;
+      
+      // Log if name is provided and doesn't match
+      if (req.body.name && req.body.name !== userId) {
+        logger.warn(`[CDP API Security] User ${userId.substring(0, 8)}... attempted to swap from wallet ${req.body.name.substring(0, 8)}...`);
+        return sendError(res, 403, 'FORBIDDEN', 'You can only swap from your own wallet');
+      }
 
-      if (!name || !network || !fromToken || !toToken || !fromAmount || slippageBps === undefined) {
-        return sendError(res, 400, 'INVALID_REQUEST', 'Missing required fields: name, network, fromToken, toToken, fromAmount, slippageBps');
+      if (!network || !fromToken || !toToken || !fromAmount || slippageBps === undefined) {
+        return sendError(res, 400, 'INVALID_REQUEST', 'Missing required fields: network, fromToken, toToken, fromAmount, slippageBps');
       }
 
       const client = getCdpClient();
@@ -1904,9 +1953,9 @@ export function cdpRouter(_serverInstance: AgentServer): express.Router {
         return sendError(res, 503, 'SERVICE_UNAVAILABLE', 'CDP client not initialized.');
       }
 
-      logger.info(`[CDP API] Executing swap: ${fromAmount} ${fromToken} to ${toToken} on ${network} for user ${name}`);
+      logger.info(`[CDP API] Authenticated user ${userId.substring(0, 8)}... executing swap: ${fromAmount} ${fromToken} to ${toToken} on ${network}`);
 
-      const account = await client.evm.getOrCreateAccount({ name });
+      const account = await client.evm.getOrCreateAccount({ name: userId });
       
       // Normalize token addresses (convert native token symbols to NATIVE_TOKEN_ADDRESS)
       const normalizedFromToken = normalizeTokenAddress(fromToken);

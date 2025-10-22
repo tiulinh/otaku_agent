@@ -60,10 +60,22 @@ export function useCDPWallet() {
     // Fallback: generate email from userId for OAuth users
     (isSignedIn && currentUser?.userId ? `${currentUser.userId}@cdp.local` : undefined);
 
+  // Get username/name from CDP currentUser
+  // Try multiple possible locations similar to email
+  const userName = 
+    (currentUser as any)?.authenticationMethods?.oauth?.name ||
+    (currentUser as any)?.authenticationMethods?.google?.name ||
+    (currentUser as any)?.authenticationMethods?.email?.name ||
+    (currentUser as any)?.name ||
+    (currentUser as any)?.displayName ||
+    // Fallback: extract from email or use generic
+    (userEmail ? userEmail.split('@')[0] : undefined);
+
   // Debug log to see currentUser structure when signed in
   if (isSignedIn && currentUser && !(currentUser as any)?.authenticationMethods?.email?.email) {
     console.warn('⚠️ CDP user signed in but email not found in standard location. currentUser:', currentUser);
     console.log('📧 Using fallback email:', userEmail);
+    console.log('👤 Using username:', userName);
   }
 
   return {
@@ -76,6 +88,7 @@ export function useCDPWallet() {
     
     // User info
     userEmail,
+    userName,
     currentUser, // Export currentUser for userId extraction
 
     // Actions

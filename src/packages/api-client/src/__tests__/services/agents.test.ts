@@ -132,7 +132,7 @@ describe('AgentsService', () => {
     it('should handle validation errors', async () => {
       (agentsService as any).post.mockRejectedValue(new Error('Validation failed'));
 
-      await expect(agentsService.createAgent(createParams as any)).rejects.toThrow('Validation failed');
+      await expect(agentsService.createAgent(createParams)).rejects.toThrow('Validation failed');
     });
   });
 
@@ -365,7 +365,9 @@ describe('AgentsService', () => {
     it('should handle API errors', async () => {
       (agentsService as any).post.mockRejectedValue(new Error('API error'));
 
-      await expect(agentsService.createAgent({ agent: { name: 'test', bio: '' } } as any)).rejects.toThrow('API error');
+      await expect(
+        agentsService.createAgent({ agent: { name: 'test', bio: 'test agent' } })
+      ).rejects.toThrow('API error');
     });
 
     it('should handle unauthorized errors', async () => {

@@ -533,6 +533,8 @@ export function createChannelsRouter(
   // Get channel details
   (router as any).get(
     '/central-channels/:channelId/details',
+    requireAuthenticated(),
+    requireChannelParticipant(getParticipants),
     async (req: express.Request, res: express.Response) => {
       const channelId = validateUuid(req.params.channelId);
       if (!channelId) {
@@ -557,6 +559,8 @@ export function createChannelsRouter(
   // Get channel participants
   (router as any).get(
     '/central-channels/:channelId/participants',
+    requireAuthenticated(),
+    requireChannelParticipant(getParticipants),
     async (req: express.Request, res: express.Response) => {
       const channelId = validateUuid(req.params.channelId);
       if (!channelId) {

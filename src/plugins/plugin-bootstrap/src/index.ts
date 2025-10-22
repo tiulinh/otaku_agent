@@ -1156,7 +1156,7 @@ async function runMultiStepCore({ runtime, message, state, callback }: { runtime
       if (action) {
         const actionContent = {
           text: `🔎 Executing action: ${action}`,
-          actions: [action, ""],
+          actions: [action],
           thought: thought ?? '',
         };
         await runtime.processActions(

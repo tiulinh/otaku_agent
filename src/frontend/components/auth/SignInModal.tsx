@@ -278,7 +278,8 @@ export function SignInModal({ isOpen }: SignInModalProps) {
                   <select
                     value={countryCode}
                     onChange={(e) => setCountryCode(e.target.value)}
-                    className="px-3 py-2 bg-background border border-input rounded-md text-sm"
+                    className="pl-3 pr-8 py-2 bg-background border border-input rounded-md text-sm appearance-none bg-size-[16px] bg-position-[right_0.5rem_center] bg-no-repeat"
+                    style={{ backgroundImage: "url(\"data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e\")" }}
                     disabled={isLoading}
                   >
                     <option value="+1">🇺🇸 +1</option>

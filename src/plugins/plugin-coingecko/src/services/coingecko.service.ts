@@ -15,6 +15,23 @@ export interface CoinGeckoTokenMetadata {
   [key: string]: unknown;
 }
 
+/**
+ * Map of native token symbols to their CoinGecko IDs
+ * These tokens can be used directly by symbol in price chart queries
+ */
+export const nativeTokenIds: Record<string, string> = {
+  'eth': 'ethereum',
+  'ethereum': 'ethereum',
+  'btc': 'bitcoin',
+  'bitcoin': 'bitcoin',
+  'matic': 'polygon-ecosystem-token',
+  'pol': 'polygon-ecosystem-token',
+  'polygon': 'polygon-ecosystem-token',
+  'sol': 'solana',
+  'solana': 'solana',
+  'bnb': 'binancecoin',
+};
+
 export class CoinGeckoService extends Service {
   static serviceType = "COINGECKO_SERVICE" as const;
   capabilityDescription = "Fetch token metadata from CoinGecko (free or Pro).";
@@ -701,50 +718,11 @@ export class CoinGeckoService extends Service {
       }
     } else {
       // Try to resolve as native token or coin ID
-      const nativeTokenIds: Record<string, string> = {
-        'eth': 'ethereum',
-        'ethereum': 'ethereum',
-        'btc': 'bitcoin',
-        'bitcoin': 'bitcoin',
-        'matic': 'polygon-ecosystem-token',
-        'pol': 'polygon-ecosystem-token',
-        'polygon': 'polygon-ecosystem-token',
-        'sol': 'solana',
-        'solana': 'solana',
-        'bnb': 'binancecoin',
-      };
-
       const normalizedToken = tokenIdentifier.toLowerCase();
-      
-      // Check if it's a native token
-      let coinId: string;
-      if (nativeTokenIds[normalizedToken]) {
-        coinId = nativeTokenIds[normalizedToken];
-        tokenSymbol = tokenIdentifier.toUpperCase();
-      } else {
-        // Not a native token, use getTokenMetadata to get the coin ID
-        logger.info(`[CoinGecko] Token ${tokenIdentifier} is not a native token or address, using getTokenMetadata to resolve coin ID`);
-        try {
-          const metadataResults = await this.getTokenMetadata([tokenIdentifier]);
-          if (metadataResults.length > 0 && metadataResults[0].success && metadataResults[0].data) {
-            coinId = metadataResults[0].data.id;
-            tokenSymbol = metadataResults[0].data.symbol?.toUpperCase() || tokenIdentifier.toUpperCase();
-            currentPrice = metadataResults[0].data.current_price || null;
-            logger.info(`[CoinGecko] Resolved ${tokenIdentifier} to coin ID: ${coinId}`);
-          } else {
-            // Fallback to using tokenIdentifier as coin ID if metadata lookup fails
-            logger.warn(`[CoinGecko] Failed to resolve ${tokenIdentifier} via getTokenMetadata, using as-is`);
-            coinId = normalizedToken;
-            tokenSymbol = tokenIdentifier.toUpperCase();
-          }
-        } catch (e) {
-          logger.warn(`[CoinGecko] Error calling getTokenMetadata for ${tokenIdentifier}, using as-is: ${e}`);
-          coinId = normalizedToken;
-          tokenSymbol = tokenIdentifier.toUpperCase();
-        }
-      }
+      const coinId = nativeTokenIds[normalizedToken] || normalizedToken;
 
       url = `${baseUrl}/coins/${coinId}/market_chart?vs_currency=usd&days=${days}`;
+      tokenSymbol = tokenIdentifier.toUpperCase();
     }
 
     // Add interval for long ranges

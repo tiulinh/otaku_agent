@@ -7,7 +7,7 @@ import {
   logger,
 } from "@elizaos/core";
 import { ActionWithParams } from "../../../../types";
-import { CoinGeckoService } from "../services/coingecko.service";
+import { CoinGeckoService, nativeTokenIds } from "../services/coingecko.service";
 
 export const getTokenPriceChartAction: ActionWithParams = {
   name: "GET_TOKEN_PRICE_CHART",
@@ -19,12 +19,12 @@ export const getTokenPriceChartAction: ActionWithParams = {
     "TOKEN_PERFORMANCE",
   ],
   description:
-    "Use this action when the user asks to see a price chart, graph, or price history for a token. When called successfully, this action automatically provides the token chart visualization in the chat with historical price data points, current price, and price change statistics. Supports multiple timeframes (1h, 24h, 7d, 30d, 1y). For non-native tokens or to ensure correct parameters, consider using GET_TOKEN_METADATA first to retrieve the correct chain and contract address.",
+    `Use this action when the user asks to see a price chart, graph, or price history for a token. When called successfully, this action automatically provides the token chart visualization in the chat with historical price data points, current price, and price change statistics. Supports multiple timeframes (1h, 24h, 7d, 30d, 1y). Native tokens (${Object.keys(nativeTokenIds).join(', ').toUpperCase()}) can be queried by symbol. For all other tokens, you MUST provide the contract address.`,
 
   parameters: {
     token: {
       type: "string",
-      description: "Token symbol or contract address (e.g., 'BTC', 'ETH', 'CLANKER', '0x1bc0c42215582d5a085795f4badbac3ff36d1bcb'). For non-native tokens, use GET_TOKEN_METADATA first to get the correct contract address.",
+      description: `Token symbol or contract address. Native tokens that can be used by symbol: ${Object.keys(nativeTokenIds).join(', ').toUpperCase()}. For all other tokens, provide the contract address (e.g., '0x1bc0c42215582d5a085795f4badbac3ff36d1bcb'). Use GET_TOKEN_METADATA first to get the contract address for non-native tokens.`,
       required: true,
     },
     timeframe: {
@@ -68,7 +68,8 @@ export const getTokenPriceChartAction: ActionWithParams = {
       // Extract and validate token parameter (required)
       const tokenRaw: string | undefined = params?.token?.trim();
       if (!tokenRaw) {
-        const errorMsg = "Missing required parameter 'token'. Please specify which token to fetch price chart for (e.g., 'BTC', 'ETH', or contract address). For non-native tokens, use GET_TOKEN_METADATA first to get the correct contract address.";
+        const supportedNativeTokens = Object.keys(nativeTokenIds).join(', ').toUpperCase();
+        const errorMsg = `Missing required parameter 'token'. Please specify which token to fetch price chart for. Native tokens (${supportedNativeTokens}) can be used by symbol. For all other tokens, provide the contract address. Use GET_TOKEN_METADATA first to get the contract address for non-native tokens.`;
         logger.error(`[GET_TOKEN_PRICE_CHART] ${errorMsg}`);
         const errorResult: ActionResult = {
           text: errorMsg,
@@ -193,7 +194,7 @@ Please analyze this price chart data and provide insights about the token's pric
       const errorText = `Failed to fetch token price chart: ${msg}
 
 Please check the following:
-1. **Token identifier**: Use a valid token symbol (e.g., 'BTC', 'ETH') or contract address. For non-native tokens, use GET_TOKEN_METADATA first to get the correct contract address.
+1. **Token identifier**: Native tokens (${Object.keys(nativeTokenIds).join(', ').toUpperCase()}) can be used by symbol. For all other tokens, you MUST provide the contract address. Use GET_TOKEN_METADATA first to get the contract address for non-native tokens.
 2. **Chain parameter** (REQUIRED): Provide the correct blockchain network:
    | Chain        | Parameter   |
    | ------------ | ----------- |
@@ -205,10 +206,10 @@ Please check the following:
    
 3. **Timeframe**: Optional - '1h', '24h', '7d', '30d', or '1y' (default: '24h')
 
-💡 **Tip**: Use GET_TOKEN_METADATA action first to retrieve the correct chain and contract address for a specific token.
+💡 **Tip**: Use GET_TOKEN_METADATA action first to retrieve the correct chain and contract address for non-native tokens.
 
 Example: "Show me the price chart for BTC on ethereum over the last 7 days"
-Example: "Get CLANKER chart on base for 30 days"`;
+Example: "Get the chart for 0x1bc0c42215582d5a085795f4badbac3ff36d1bcb on base for 30 days"`;
       
       const errorResult: ActionResult = {
         text: errorText,

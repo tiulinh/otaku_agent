@@ -306,19 +306,23 @@ export class CdpService extends Service {
   /**
    * Get comprehensive wallet information from cache if available and not expired
    * Falls back to fetching fresh data if cache miss or expired
+   * @param accountName User's account identifier
+   * @param chain Optional specific chain to fetch (if not provided, fetches all chains)
    */
-  async getWalletInfoCached(accountName: string): Promise<WalletInfo> {
-    const cached = this.walletInfoCache.get(accountName);
+  async getWalletInfoCached(accountName: string, chain?: string): Promise<WalletInfo> {
+    // Create cache key that includes chain if specified
+    const cacheKey = chain ? `${accountName}:${chain}` : accountName;
+    const cached = this.walletInfoCache.get(cacheKey);
     const now = Date.now();
     
     if (cached && (now - cached.timestamp) < this.CACHE_DURATION_MS) {
-      logger.info(`[CDP Service] Using cached wallet info for ${accountName} (age: ${Math.round((now - cached.timestamp) / 1000)}s)`);
+      logger.info(`[CDP Service] Using cached wallet info for ${accountName}${chain ? ` (chain: ${chain})` : ''} (age: ${Math.round((now - cached.timestamp) / 1000)}s)`);
       return cached.data;
     }
     
     // Cache miss or expired, fetch fresh data
-    logger.info(`[CDP Service] Cache miss or expired for ${accountName}, fetching fresh data`);
-    return this.fetchWalletInfo(accountName);
+    logger.info(`[CDP Service] Cache miss or expired for ${accountName}${chain ? ` (chain: ${chain})` : ''}, fetching fresh data`);
+    return this.fetchWalletInfo(accountName, chain);
   }
 
   /**
@@ -341,8 +345,10 @@ export class CdpService extends Service {
    * Fetch fresh wallet information, bypassing cache
    * Use this when you need the most up-to-date wallet state
    * Automatically updates the cache with fresh data
+   * @param accountName User's account identifier
+   * @param chain Optional specific chain to fetch (if not provided, fetches all chains)
    */
-  async fetchWalletInfo(accountName: string): Promise<WalletInfo> {
+  async fetchWalletInfo(accountName: string, chain?: string): Promise<WalletInfo> {
     if (!this.client) {
       throw new Error("CDP is not authenticated");
     }
@@ -350,19 +356,36 @@ export class CdpService extends Service {
     const account = await this.getOrCreateAccount({ name: accountName });
     const address = account.address;
 
-    logger.info(`[CDP Service] Fetching wallet info for ${accountName} (${address})`);
+    logger.info(`[CDP Service] Fetching wallet info for ${accountName} (${address})${chain ? ` on chain: ${chain}` : ' (all chains)'}`);
 
     const alchemyKey = process.env.ALCHEMY_API_KEY;
     if (!alchemyKey) {
       throw new Error('Alchemy API key not configured');
     }
 
+    // Determine which networks to fetch
+    let networksToFetch: string[];
+    if (chain) {
+      // Validate the chain is supported
+      const chainConfig = getChainConfig(chain);
+      if (!chainConfig) {
+        throw new Error(`Unsupported chain: ${chain}`);
+      }
+      // Check if it's a mainnet network
+      if (!MAINNET_NETWORKS.includes(chain as any)) {
+        throw new Error(`Chain ${chain} is not a supported mainnet network`);
+      }
+      networksToFetch = [chain];
+    } else {
+      networksToFetch = MAINNET_NETWORKS;
+    }
+
     const allTokens: any[] = [];
     const allNfts: any[] = [];
     let totalUsdValue = 0;
 
-    // Fetch tokens across all mainnet networks
-    for (const network of MAINNET_NETWORKS) {
+    // Fetch tokens across specified networks
+    for (const network of networksToFetch) {
       try {
         const chainConfig = getChainConfig(network);
         if (!chainConfig) {
@@ -510,7 +533,7 @@ export class CdpService extends Service {
 
     const finalTotalUsdValue = isNaN(totalUsdValue) ? 0 : totalUsdValue;
     
-    logger.info(`[CDP Service] Found ${allTokens.length} tokens, ${allNfts.length} NFTs for ${accountName}, total value: $${finalTotalUsdValue.toFixed(2)}`);
+    logger.info(`[CDP Service] Found ${allTokens.length} tokens, ${allNfts.length} NFTs for ${accountName}${chain ? ` on ${chain}` : ''}, total value: $${finalTotalUsdValue.toFixed(2)}`);
 
     const walletInfo: WalletInfo = {
       address,
@@ -519,8 +542,9 @@ export class CdpService extends Service {
       totalUsdValue: finalTotalUsdValue,
     };
 
-    // Update cache with fresh data
-    this.walletInfoCache.set(accountName, {
+    // Update cache with fresh data (cache key includes chain if specified)
+    const cacheKey = chain ? `${accountName}:${chain}` : accountName;
+    this.walletInfoCache.set(cacheKey, {
       data: walletInfo,
       timestamp: Date.now(),
     });
@@ -663,6 +687,8 @@ export class CdpService extends Service {
       abi: erc721Abi,
       functionName: 'safeTransferFrom',
       args: [account.address as `0x${string}`, to, BigInt(tokenId)],
+      account: walletClient.account ?? null,
+      chain: walletClient.chain ?? undefined,
     });
 
     // Wait for transaction confirmation

@@ -28,10 +28,16 @@ export const cdpWalletInfo: ActionWithParams = {
     "WALLET_ASSETS",
   ],
   description:
-    "Retrieves the user's latest wallet data including balances, tokens, and NFTs. Use this action to get up-to-date wallet information or to confirm wallet status after a transaction.",
+    "Retrieves the user's latest wallet data including balances, tokens, and NFTs. Use this action to get up-to-date wallet information or to confirm wallet status after a transaction. Optionally specify a chain to fetch data for a specific network.",
 
-  // No parameters needed - operates on the user's own wallet
-  parameters: {},
+  // Optional chain parameter - if not provided, fetches all chains
+  parameters: {
+    chain: {
+      type: "string",
+      description: "Optional blockchain network to query (e.g., 'base', 'ethereum', 'polygon', 'arbitrum', 'optimism'). If not provided, fetches data from all supported chains.",
+      required: false,
+    },
+  },
   
   validate: async (_runtime: IAgentRuntime, message: Memory) => {
     try {
@@ -57,15 +63,40 @@ export const cdpWalletInfo: ActionWithParams = {
   handler: async (
     runtime: IAgentRuntime,
     message: Memory,
-    _state?: State,
+    state?: State,
     _options?: Record<string, unknown>,
     callback?: HandlerCallback,
   ): Promise<ActionResult> => {
     try {
       logger.info("[USER_WALLET_INFO] Fetching user wallet information");
       
-      // Store input parameters for return (empty for this action)
-      const inputParams = {};
+      // Read parameters from state (extracted by multiStepDecisionTemplate)
+      const composedState = await runtime.composeState(message, ["ACTION_STATE"], true);
+      const params = composedState?.data?.actionParams || {};
+      
+      // Extract chain parameter if provided
+      const chain = params?.chain?.trim();
+      
+      // Store input parameters for return
+      const inputParams = chain ? { chain } : {};
+
+      // Validate chain parameter if provided
+      const validChains = ['base', 'ethereum', 'polygon', 'arbitrum', 'optimism'];
+      if (chain && !validChains.includes(chain.toLowerCase())) {
+        const errorMsg = `Invalid chain: ${chain}. Supported chains: ${validChains.join(', ')}`;
+        logger.error(`[USER_WALLET_INFO] ${errorMsg}`);
+        const errorResult: ActionResult = {
+          text: `❌ ${errorMsg}`,
+          success: false,
+          error: "invalid_chain",
+          input: inputParams,
+        } as ActionResult & { input: typeof inputParams };
+        callback?.({ 
+          text: errorResult.text,
+          content: { error: "invalid_chain", details: errorMsg }
+        });
+        return errorResult;
+      }
 
       const wallet = await getEntityWallet(
         runtime,
@@ -120,15 +151,16 @@ export const cdpWalletInfo: ActionWithParams = {
       }
 
       // Fetch comprehensive wallet info (always fresh data)
-      logger.info(`[USER_WALLET_INFO] Fetching fresh wallet info for account: ${accountName}`);
-      callback?.({ text: "🔍 Fetching your wallet information..." });
+      const chainInfo = chain ? ` on ${chain}` : '';
+      logger.info(`[USER_WALLET_INFO] Fetching fresh wallet info for account: ${accountName}${chainInfo}`);
+      callback?.({ text: `🔍 Fetching your wallet information${chainInfo}...` });
 
-      const walletInfo = await cdpService.fetchWalletInfo(accountName);
+      const walletInfo = await cdpService.fetchWalletInfo(accountName, chain);
 
-      logger.info(`[USER_WALLET_INFO] Successfully fetched wallet info: ${walletInfo.tokens.length} tokens, ${walletInfo.nfts.length} NFTs, $${walletInfo.totalUsdValue.toFixed(2)} total value`);
+      logger.info(`[USER_WALLET_INFO] Successfully fetched wallet info: ${walletInfo.tokens.length} tokens, ${walletInfo.nfts.length} NFTs, $${walletInfo.totalUsdValue.toFixed(2)} total value${chainInfo}`);
 
       // Format the response
-      let text = `💼 **Wallet Information**\n\n`;
+      let text = `💼 **Wallet Information${chain ? ` (${chain.charAt(0).toUpperCase() + chain.slice(1)})` : ''}**\n\n`;
       text += `📍 **Address:** \`${walletInfo.address}\`\n`;
       text += `💰 **Total Value:** $${walletInfo.totalUsdValue.toFixed(2)}\n\n`;
 
@@ -198,6 +230,7 @@ export const cdpWalletInfo: ActionWithParams = {
         tokens: walletInfo.tokens,
         nfts: walletInfo.nfts,
         totalUsdValue: walletInfo.totalUsdValue,
+        ...(chain && { chain }),
       };
 
       callback?.({ 
@@ -252,6 +285,18 @@ export const cdpWalletInfo: ActionWithParams = {
     [
       { name: "{{user}}", content: { text: "what's in my wallet?" } },
       { name: "{{agent}}", content: { text: "🔍 Fetching your wallet information...", action: "USER_WALLET_INFO" } },
+    ],
+    [
+      { name: "{{user}}", content: { text: "show my wallet on base" } },
+      { name: "{{agent}}", content: { text: "🔍 Fetching your wallet information on base...", action: "USER_WALLET_INFO", chain: "base" } },
+    ],
+    [
+      { name: "{{user}}", content: { text: "check my ethereum wallet" } },
+      { name: "{{agent}}", content: { text: "🔍 Fetching your wallet information on ethereum...", action: "USER_WALLET_INFO", chain: "ethereum" } },
+    ],
+    [
+      { name: "{{user}}", content: { text: "what tokens do I have on polygon?" } },
+      { name: "{{agent}}", content: { text: "🔍 Fetching your wallet information on polygon...", action: "USER_WALLET_INFO", chain: "polygon" } },
     ],
   ],
 };

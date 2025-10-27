@@ -1,6 +1,7 @@
 import { Tool } from "@/components/action-tool"
 import { ToolGroup } from "@/components/action-tool-group"
 import { AnimatedResponse } from "@/components/chat/animated-response"
+import { ChatPriceChart } from "@/components/chat/chat-price-chart"
 import ArrowRightIcon from "@/components/icons/arrow-right"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -24,6 +25,31 @@ const DEFAULT_QUICK_PROMPTS = [
   "What can you help me with?",
   "Analyze Aave protocol TVL"
 ]
+
+// Helper function to extract chart data from a message
+const extractChartData = (message: Message): any => {
+  if (message.rawMessage?.actionResult?.values?.data_points) {
+    return message.rawMessage.actionResult.values
+  }
+  
+  if (message.rawMessage?.actionResult?.data?.data_points) {
+    return message.rawMessage.actionResult.data
+  }
+  
+  return null
+}
+
+// Helper function to find all chart data in an action group
+const findAllChartDataInGroup = (actionGroup: Message[]): any[] => {
+  const charts: any[] = []
+  for (const message of actionGroup) {
+    const chartData = extractChartData(message)
+    if (chartData) {
+      charts.push(chartData)
+    }
+  }
+  return charts
+}
 
 interface Message {
   id: string
@@ -527,6 +553,8 @@ export function ChatInterface({ agent, userId, serverId, channelId, isNewChatMod
                   const actionGroup = item
                   const firstAction = actionGroup[0]
                   const isLastGroup = groupIndex === groupedMessages.length - 1
+                  // Find all chart data in this action group
+                  const chartDataArray = findAllChartDataInGroup(actionGroup)
                   
                   // Get the latest action's status and name for label
                   const latestAction = actionGroup[actionGroup.length - 1]
@@ -575,7 +603,7 @@ export function ChatInterface({ agent, userId, serverId, channelId, isNewChatMod
                   return (
                     <div
                       key={`action-group-${groupIndex}-${firstAction.id}`}
-                      className="flex flex-col gap-1 items-start"
+                      className="flex flex-col gap-2 items-start"
                     >
                       <div className="max-w-[85%] w-full">
                         <ToolGroup 
@@ -602,6 +630,16 @@ export function ChatInterface({ agent, userId, serverId, channelId, isNewChatMod
                           })}
                         </ToolGroup>
                       </div>
+                      
+                      {/* Render all charts from this action group */}
+                      {chartDataArray.length > 0 && chartDataArray.map((chartData, chartIndex) => (
+                        <div 
+                          key={`chart-${groupIndex}-${chartIndex}`}
+                          className="max-w-[85%] w-full bg-card rounded-lg border border-border p-4"
+                        >
+                          <ChatPriceChart data={chartData} />
+                        </div>
+                      ))}
                     </div>
                   )
                 }

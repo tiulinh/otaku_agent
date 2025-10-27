@@ -641,6 +641,178 @@ export class CoinGeckoService extends Service {
       throw err;
     }
   }
+
+  /**
+   * Get token price chart data for visualization
+   * Similar to what TokenDetailModal.tsx does
+   */
+  async getTokenPriceChart(
+    tokenIdentifier: string,
+    timeframe: string = '24h',
+    chain: string = 'base'
+  ): Promise<any> {
+    const isPro = Boolean(this.proApiKey);
+    const baseUrl = isPro ? "https://pro-api.coingecko.com/api/v3" : "https://api.coingecko.com/api/v3";
+
+    // Map timeframes to days
+    const daysMap: Record<string, string> = {
+      '1h': '1',
+      '24h': '1',
+      '7d': '7',
+      '30d': '30',
+      '1y': '365',
+    };
+    const days = daysMap[timeframe] || '1';
+
+    let url: string;
+    let tokenSymbol: string | null = null;
+    let currentPrice: number | null = null;
+
+    // Check if it's a contract address (0x...)
+    const isContractAddress = /^0x[a-fA-F0-9]{40}$/.test(tokenIdentifier);
+
+    if (isContractAddress) {
+      // ERC20 token - use contract address
+      const platformMap: Record<string, string> = {
+        base: 'base',
+        ethereum: 'ethereum',
+        polygon: 'polygon-pos',
+      };
+      const platform = platformMap[chain.toLowerCase()] || chain;
+      url = `${baseUrl}/coins/${platform}/contract/${tokenIdentifier}/market_chart?vs_currency=usd&days=${days}`;
+      
+      // Try to get token symbol from a separate call
+      try {
+        const infoUrl = `${baseUrl}/coins/${platform}/contract/${tokenIdentifier}`;
+        const infoRes = await fetch(infoUrl, {
+          headers: {
+            Accept: 'application/json',
+            ...(isPro && this.proApiKey ? { 'x-cg-pro-api-key': this.proApiKey } : {}),
+            'User-Agent': 'ElizaOS-CoinGecko-Plugin/1.0',
+          },
+        });
+        if (infoRes.ok) {
+          const info = (await infoRes.json()) as any;
+          tokenSymbol = info.symbol?.toUpperCase() || null;
+          currentPrice = info.market_data?.current_price?.usd || null;
+        }
+      } catch (e) {
+        logger.warn(`[CoinGecko] Failed to fetch token info for ${tokenIdentifier}`);
+      }
+    } else {
+      // Try to resolve as native token or coin ID
+      const nativeTokenIds: Record<string, string> = {
+        'eth': 'ethereum',
+        'ethereum': 'ethereum',
+        'btc': 'bitcoin',
+        'bitcoin': 'bitcoin',
+        'matic': 'matic-network',
+        'pol': 'matic-network',
+        'polygon': 'matic-network',
+        'sol': 'solana',
+        'solana': 'solana',
+        'bnb': 'binancecoin',
+      };
+
+      const normalizedToken = tokenIdentifier.toLowerCase();
+      const coinId = nativeTokenIds[normalizedToken] || normalizedToken;
+
+      url = `${baseUrl}/coins/${coinId}/market_chart?vs_currency=usd&days=${days}`;
+      tokenSymbol = tokenIdentifier.toUpperCase();
+    }
+
+    // Add interval for long ranges
+    if (timeframe === '1y') {
+      url += `&interval=daily`;
+    }
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+
+    try {
+      logger.debug(`[CoinGecko] GET ${url}`);
+      const res = await fetch(url, {
+        method: 'GET',
+        headers: {
+          Accept: 'application/json',
+          ...(isPro && this.proApiKey ? { 'x-cg-pro-api-key': this.proApiKey } : {}),
+          'User-Agent': 'ElizaOS-CoinGecko-Plugin/1.0',
+        },
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeout);
+
+      if (!res.ok) {
+        const body = await safeReadJson(res);
+        const msg = `CoinGecko price chart API error ${res.status}: ${res.statusText}${body ? ` - ${JSON.stringify(body)}` : ''}`;
+        logger.warn(`[CoinGecko] price chart request failed for ${tokenIdentifier}: ${msg}`);
+        throw new Error(msg);
+      }
+
+      const data = (await res.json()) as any;
+      const prices = data.prices || [];
+
+      // Filter data based on timeframe
+      let filteredPrices = prices;
+      if (timeframe === '1h') {
+        // Last hour - get last 60 data points
+        filteredPrices = prices.slice(-60);
+      }
+
+      // Format data points
+      const dataPoints = filteredPrices.map(([timestamp, price]: [number, number]) => ({
+        timestamp,
+        price,
+        date: this.formatDateForTimeframe(timestamp, timeframe),
+      }));
+
+      // Get current price from last data point if not already set
+      if (!currentPrice && dataPoints.length > 0) {
+        currentPrice = dataPoints[dataPoints.length - 1].price;
+      }
+
+      return {
+        token_identifier: tokenIdentifier,
+        token_symbol: tokenSymbol,
+        chain: chain,
+        timeframe: timeframe,
+        current_price: currentPrice,
+        data_points: dataPoints,
+        data_points_count: dataPoints.length,
+      };
+    } catch (err) {
+      clearTimeout(timeout);
+      const msg = err instanceof Error ? err.message : String(err);
+      logger.error(`[CoinGecko] getTokenPriceChart failed for ${tokenIdentifier}: ${msg}`);
+      throw err;
+    }
+  }
+
+  /**
+   * Helper method to format dates based on timeframe
+   */
+  private formatDateForTimeframe(timestamp: number, timeframe: string): string {
+    const date = new Date(timestamp);
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    
+    switch (timeframe) {
+      case '1h':
+      case '24h':
+        return `${hours}:${minutes}`;
+      case '7d':
+      case '30d':
+        return `${month}/${day}`;
+      case '1y':
+        const year = String(date.getFullYear()).slice(-2);
+        return `${month}/${year}`;
+      default:
+        return `${day}/${month}`;
+    }
+  }
 }
 
 function isEvmAddress(s: string): boolean {

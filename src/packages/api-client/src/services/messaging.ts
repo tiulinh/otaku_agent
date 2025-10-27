@@ -23,9 +23,9 @@ import {
   CreateJobRequest,
   CreateJobResponse,
   JobDetailsResponse,
-  ListJobsResponse,
+  JobListResponse,
   ListJobsParams,
-  JobsHealthResponse,
+  JobHealthResponse,
   JobStatus,
 } from '../types/jobs';
 
@@ -416,7 +416,7 @@ export class MessagingService extends BaseApiClient {
   }
 
   // =============================================================================
-  // Jobs API - One-off messaging similar to @bankr/sdk
+  // Jobs API - One-off messaging
   // =============================================================================
 
   /**
@@ -478,8 +478,8 @@ export class MessagingService extends BaseApiClient {
    * });
    * ```
    */
-  async listJobs(params?: ListJobsParams): Promise<ListJobsResponse> {
-    return this.get<ListJobsResponse>('/api/messaging/jobs', { params });
+  async listJobs(params?: ListJobsParams): Promise<JobListResponse> {
+    return this.get<JobListResponse>('/api/messaging/jobs', { params });
   }
 
   /**
@@ -494,8 +494,8 @@ export class MessagingService extends BaseApiClient {
    * console.log(`Completed: ${health.statusCounts.completed}`);
    * ```
    */
-  async getJobsHealth(): Promise<JobsHealthResponse> {
-    return this.get<JobsHealthResponse>('/api/messaging/jobs/health');
+  async getJobsHealth(): Promise<JobHealthResponse> {
+    return this.get<JobHealthResponse>('/api/messaging/jobs/health');
   }
 
   /**

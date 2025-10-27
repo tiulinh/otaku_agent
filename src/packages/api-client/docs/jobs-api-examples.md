@@ -1,6 +1,6 @@
 # Jobs API Examples
 
-The Jobs API provides a simple way to send one-off messages to agents and wait for responses, similar to the @bankr/sdk pattern.
+The Jobs API provides a simple way to send one-off messages to agents and wait for responses.
 
 ## Features
 

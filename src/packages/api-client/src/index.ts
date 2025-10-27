@@ -26,6 +26,7 @@ export { ServerService } from './services/server';
 export { SystemService } from './services/system';
 export { SessionsService } from './services/sessions';
 export { RunsService } from './services/runs';
+export { JobsService } from './services/jobs';
 export { CdpService } from './services/cdp';
 export type {
   Token,

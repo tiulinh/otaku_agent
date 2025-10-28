@@ -27,18 +27,7 @@ export function FundModalContent({ walletAddress, shortAddress }: FundModalConte
   };
 
   return (
-    <>
-      {/* Preload chain icons to prevent flash on hover */}
-      <div className="hidden">
-        {SUPPORTED_CHAINS.map((chain) => {
-          const chainWalletIcon = getChainWalletIcon(chain);
-          return chainWalletIcon ? (
-            <img key={chain} src={chainWalletIcon} alt="" />
-          ) : null;
-        })}
-      </div>
-
-      <div className="space-y-4 w-full max-w-md mx-auto">
+    <div className="space-y-4 w-full max-w-md mx-auto">
         <h3 className="text-lg font-semibold">Fund Your Wallet</h3>
         <p className="text-sm text-muted-foreground">
           Transfer assets to your wallet on any supported network
@@ -105,7 +94,6 @@ export function FundModalContent({ walletAddress, shortAddress }: FundModalConte
         Close
       </Button>
     </div>
-    </>
   );
 }
 

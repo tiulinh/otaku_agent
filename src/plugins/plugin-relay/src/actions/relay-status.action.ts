@@ -101,7 +101,7 @@ export const relayStatusAction: ActionWithParams = {
         }
         
         const errorResult: ActionResult = {
-          text: `❌ ${errorMsg}`,
+          text: `✗ ${errorMsg}`,
           success: false,
           error: "service_unavailable",
           input: earlyFailureInput,
@@ -185,7 +185,7 @@ export const relayStatusAction: ActionWithParams = {
         const errorMsg = "Missing status identifiers. Please provide at least one of: request ID, transaction hash, or user address.";
         logger.error(`[CHECK_RELAY_STATUS] ${errorMsg}`);
         const errorResult: ActionResult = {
-          text: `❌ ${errorMsg}`,
+          text: `✗ ${errorMsg}`,
           success: false,
           error: "missing_required_parameter",
           input: statusParams || {},
@@ -213,7 +213,7 @@ export const relayStatusAction: ActionWithParams = {
         const errorMsg = "No transactions found matching your request";
         logger.warn(`[CHECK_RELAY_STATUS] ${errorMsg}`);
         const notFoundResponse: ActionResult = {
-          text: `❌ ${errorMsg}`,
+          text: `✗ ${errorMsg}`,
           success: false,
           error: "no_transactions_found",
           input: inputParams,
@@ -265,7 +265,7 @@ export const relayStatusAction: ActionWithParams = {
         // If we can't get params, just use empty object
       }
       
-      const errorText = `❌ Failed to get transaction status: ${errorMessage}`;
+      const errorText = `✗ Failed to get transaction status: ${errorMessage}`;
       const errorResponse: ActionResult = {
         text: errorText,
         success: false,
@@ -321,11 +321,11 @@ function formatStatusResponse(statuses: RelayStatus[]): string {
     return formatSingleStatus(statuses[0]);
   }
 
-  let response = `📊 **Found ${statuses.length} Transactions**\n\n`;
+  let response = `▪ **Found ${statuses.length} Transactions**\n\n`;
 
   statuses.forEach((status, index) => {
     response += `**${index + 1}. ${status.id.slice(0, 10)}...**\n`;
-    response += `- Status: ${getStatusEmoji(status.status)} ${status.status}\n`;
+    response += `- Status: ${getStatusIndicator(status.status)} ${status.status}\n`;
     response += `- Created: ${new Date(status.createdAt).toLocaleString()}\n`;
 
     if (status.data?.inTxs?.[0]) {
@@ -342,10 +342,10 @@ function formatStatusResponse(statuses: RelayStatus[]): string {
 }
 
 function formatSingleStatus(status: RelayStatus): string {
-  const statusEmoji = getStatusEmoji(status.status);
+  const statusIndicator = getStatusIndicator(status.status);
 
   let response = `
-${statusEmoji} **Transaction Status: ${status.status.toUpperCase()}**
+${statusIndicator} **Transaction Status: ${status.status.toUpperCase()}**
 
 **Request ID:** \`${status.id}\`
 **User:** \`${status.user}\`
@@ -387,14 +387,14 @@ ${statusEmoji} **Transaction Status: ${status.status.toUpperCase()}**
   return response;
 }
 
-function getStatusEmoji(status: string): string {
-  const emojis: Record<string, string> = {
-    success: "✅",
-    pending: "⏳",
-    failed: "❌",
-    processing: "🔄",
+function getStatusIndicator(status: string): string {
+  const indicators: Record<string, string> = {
+    success: "✓",
+    pending: "⧗",
+    failed: "✗",
+    processing: "↻",
   };
-  return emojis[status.toLowerCase()] || "❓";
+  return indicators[status.toLowerCase()] || "?";
 }
 
 function getChainName(chainId: number): string {

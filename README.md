@@ -219,6 +219,57 @@ Once running:
 - **API**: http://localhost:3000/api/
 - **Health Check**: http://localhost:3000/api/server/ping
 
+## 🔌 Plugins
+
+### CDP Plugin
+
+The CDP (Coinbase Developer Platform) plugin provides wallet and payment functionality:
+
+#### Available Actions
+
+- **USER_WALLET_INFO** - View wallet balances, tokens, and NFTs
+- **USER_WALLET_TOKEN_TRANSFER** - Transfer tokens to other addresses
+- **USER_WALLET_NFT_TRANSFER** - Transfer NFTs to other addresses
+- **USER_WALLET_SWAP** - Swap tokens using DEX aggregators
+- **FETCH_WITH_PAYMENT** ⭐ - Make paid API requests using x402 protocol
+
+#### FETCH_WITH_PAYMENT Action
+
+Make HTTP requests to x402-enabled paid APIs with automatic onchain payment handling.
+
+**Features:**
+- Automatic 402 Payment Required response handling
+- Onchain USDC payments on Base network
+- Configurable payment limits
+- Support for GET and POST requests
+- Returns both API response and payment receipt
+
+**Usage Examples:**
+```
+"fetch https://api.example.com/paid-data with payment"
+"make a paid request to https://x402-service.com/premium with max payment 2 USDC"
+"POST to https://api.example.com/submit with body {\"key\": \"value\"}"
+```
+
+**Parameters:**
+- `url` (required) - The x402-enabled API endpoint
+- `method` (optional) - HTTP method (GET or POST, defaults to GET)
+- `headers` (optional) - Custom HTTP headers
+- `body` (optional) - Request body for POST requests
+- `maxPayment` (optional) - Maximum payment in USDC (defaults to 1.0)
+
+**Response includes:**
+- API response data
+- Payment transaction hash
+- Network and payer information
+- Success status
+
+Learn more: https://docs.cdp.coinbase.com/x402/quickstart-for-buyers
+
+### Web Search Plugin
+
+Provides web search and crypto news functionality using Tavily and CoinDesk APIs.
+
 ## 📖 Next Steps
 
 1. **Customize your agent** in `src/character.ts`

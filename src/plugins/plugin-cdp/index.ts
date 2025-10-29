@@ -7,6 +7,7 @@ import { CdpService } from "./services/cdp.service";
 // import { cdpWalletBalance } from "./actions/cdp-wallet-balance";
 // import { cdpCreateWallet } from "./actions/cdp-wallet-create";
 import { cdpWalletInfo } from "./actions/cdp-wallet-info";
+import { cdpWalletCheckBalance } from "./actions/cdp-wallet-check-balance";
 import { cdpWalletSwap } from "./actions/cdp-wallet-swap";
 import { cdpWalletTokenTransfer } from "./actions/cdp-wallet-token-transfer";
 import { cdpWalletNftTransfer } from "./actions/cdp-wallet-nft-transfer";
@@ -30,6 +31,7 @@ export type { CdpNetwork } from "./types";
  * 
  * Actions:
  * - USER_WALLET_INFO: View wallet balances and assets
+ * - CHECK_TOKEN_BALANCE: Fast balance check for specific token (optimized for transaction validation)
  * - USER_WALLET_TOKEN_TRANSFER: Transfer ERC20 tokens
  * - USER_WALLET_NFT_TRANSFER: Transfer NFTs
  * - USER_WALLET_SWAP: Swap tokens via DEX aggregators
@@ -41,7 +43,7 @@ export const cdpPlugin: Plugin = {
     "Coinbase Developer Platform plugin providing authenticated EVM account creation, token transfers, NFT transfers, swaps, and x402 paid API requests via CDP SDK",
   evaluators: [],
   providers: [walletStateProvider],
-  actions: [cdpWalletInfo, cdpWalletTokenTransfer, cdpWalletNftTransfer, cdpWalletSwap, cdpWalletFetchWithPayment],
+  actions: [cdpWalletInfo, cdpWalletCheckBalance, cdpWalletTokenTransfer, cdpWalletNftTransfer, cdpWalletSwap, cdpWalletFetchWithPayment],
   services: [CdpService],
 };
 

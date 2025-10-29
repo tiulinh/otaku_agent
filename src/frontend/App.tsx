@@ -16,12 +16,8 @@ import { MobileHeader } from './components/dashboard/mobile-header';
 import { LoadingPanelProvider, useLoadingPanel } from './contexts/LoadingPanelContext';
 import { ModalProvider } from './contexts/ModalContext';
 import { MessageSquare, Info } from 'lucide-react';
-import mockDataJson from './mock.json';
-import type { MockData } from './types/dashboard';
 import { resolveCdpUserInfo, type CdpUser } from '@/lib/cdpUser';
 import { UUID } from '@elizaos/core';
-
-const mockData = mockDataJson as MockData;
 
 /**
  * Authenticate with backend and get JWT token
@@ -111,6 +107,7 @@ function App() {
     displayName: string;
     bio: string;
     email: string;
+    phoneNumber?: string;
     walletAddress: string;
     memberSince: string;
   } | null>(null);
@@ -216,11 +213,6 @@ function App() {
           if (error?.status === 404 || error?.code === 'NOT_FOUND') {
             console.log(' Creating new user entity in database...');
             
-            console.log(' CDP provided username:', cdpUsername || '(not found)');
-            console.log(' CDP provided email:', cdpEmail || '(not found)');
-            console.log(' Saving to database - Username:', finalUsername);
-            console.log(' Saving to database - Email:', finalEmail);
-            
             entity = await elizaClient.entities.createEntity({
               id: userId as UUID,
               agentId: agentId as UUID,
@@ -242,6 +234,7 @@ function App() {
               displayName: entity.metadata?.displayName || finalUsername,
               bio: entity.metadata?.bio || 'DeFi Enthusiast • Blockchain Explorer',
               email: entity.metadata?.email || finalEmail,
+              phoneNumber: entity.metadata?.phoneNumber || phoneNumber,
               walletAddress,
               memberSince: entity.metadata?.createdAt || new Date().toISOString(),
             });
@@ -287,6 +280,7 @@ function App() {
           displayName: entity.metadata?.displayName || finalUsername || 'User',
           bio: entity.metadata?.bio || 'DeFi Enthusiast • Blockchain Explorer',
           email: finalEmail || '',
+          phoneNumber: entity.metadata?.phoneNumber || '',
           walletAddress: walletAddress || '',
           memberSince: entity.metadata?.createdAt || new Date().toISOString(),
         });
@@ -574,7 +568,6 @@ function App() {
         currentView={currentView}
         userProfile={userProfile}
         totalBalance={totalBalance}
-        mockData={mockData}
         isLoadingChannels={isLoadingChannels}
         walletRef={walletRef}
         handleNewChat={handleNewChat}
@@ -604,7 +597,6 @@ function AppContent({
   currentView,
   userProfile,
   totalBalance,
-  mockData,
   isLoadingChannels,
   walletRef,
   handleNewChat,
@@ -642,7 +634,7 @@ function AppContent({
       )}
       
       {/* Mobile Header */}
-      <MobileHeader mockData={mockData} onHomeClick={() => setCurrentView('chat')} />
+      <MobileHeader onHomeClick={() => setCurrentView('chat')} />
 
       {/* Desktop Layout - 3 columns */}
       <div className="w-full grid grid-cols-1 lg:grid-cols-12 gap-gap lg:px-sides">
@@ -742,7 +734,7 @@ function AppContent({
         {/* Right Sidebar - Widget & CDP Wallet & Notifications */}
         <div className="col-span-3 hidden lg:block">
           <div className="space-y-gap py-sides min-h-screen max-h-screen sticky top-0 overflow-clip">
-            <Widget widgetData={mockData.widgetData} />
+            <Widget />
             {userId && <CDPWalletCard ref={walletRef} userId={userId} walletAddress={userProfile?.walletAddress} onBalanceChange={handleBalanceChange} />}
             <CollapsibleNotifications />
           </div>

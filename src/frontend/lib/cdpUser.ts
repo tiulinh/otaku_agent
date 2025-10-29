@@ -68,14 +68,23 @@ export function extractPhoneFromCdpUser(
   user: CdpUser | undefined
 ): string | undefined {
   if (!user) return undefined;
-  return user.authenticationMethods?.sms?.phoneNumber;
+  const sms = user.authenticationMethods?.sms;
+  if (!sms) return undefined;
+  const raw = sms.phoneNumber;
+  const cc = sms.countryCode;
+  // Prefer provided E.164; otherwise compose from countryCode + local number
+  const combined = raw?.startsWith('+') ? raw : (raw && cc ? `${cc}${raw}` : raw);
+  if (!combined) return undefined;
+  // Normalize to E.164 (+digits only)
+  const digits = combined.replace(/[^0-9]/g, '');
+  return digits ? `+${digits}` : undefined;
 }
 
 function generateEmailFromPhone(phone: string): string | undefined {
   if (!phone) return undefined;
   const digits = phone.replace(/[^0-9]/g, '');
   if (!digits) return undefined;
-  return `p${digits}@cdp.sms`;
+  return `p${digits}@cdp.local`;
 }
 
 export function resolveCdpUserInfo(
@@ -83,6 +92,7 @@ export function resolveCdpUserInfo(
   options?: CdpUserInfoOptions
 ): CdpUserInfo {
   const phoneNumber = extractPhoneFromCdpUser(user);
+  console.log(' phoneNumber:', phoneNumber);
   const email =
     extractEmailFromCdpUser(user, Boolean(options?.isSignedIn)) ||
     (phoneNumber ? generateEmailFromPhone(phoneNumber) : undefined) ||

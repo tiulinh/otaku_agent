@@ -238,29 +238,23 @@ export function TokenDetailModalContent({ token }: TokenDetailModalContentProps)
     }
   };
 
-  const formatPrice = (price: number): string => {
-    if (price < 0.01) return price.toExponential(2);
-    if (price < 1) return price.toFixed(6).replace(/\.?0+$/, '');
-    return price.toFixed(2);
-  };
-
-  const formatYAxisValue = (value: number): string => {
+  // Base formatting function used by all price/value displays
+  const formatValue = (value: number, includeSymbol: boolean = false): string => {
+    const prefix = includeSymbol ? '$' : '';
+    
     if (value === 0) return '';
-    if (value >= 1000000000) return `$${(value / 1000000000).toFixed(2)}B`;
-    if (value >= 1000000) return `$${(value / 1000000).toFixed(2)}M`;
-    if (value >= 1000) return `$${(value / 1000).toFixed(2)}K`;
-    if (value >= 1) return `$${value.toFixed(2)}`;
-    if (value >= 0.01) return `$${value.toFixed(2)}`;
-    if (value >= 0.0001) return `$${value.toFixed(6)}`;
-    return `$${value.toFixed(8)}`;
+    if (value >= 1000000000) return `${prefix}${(value / 1000000000).toFixed(2)}B`;
+    if (value >= 1000000) return `${prefix}${(value / 1000000).toFixed(2)}M`;
+    if (value >= 1000) return `${prefix}${(value / 1000).toFixed(2)}K`;
+    if (value >= 1) return `${prefix}${value.toFixed(2)}`;
+    if (value >= 0.01) return `${prefix}${value.toFixed(4)}`;
+    if (value >= 0.0001) return `${prefix}${value.toFixed(6)}`;
+    return `${prefix}${value.toFixed(8)}`;
   };
 
-  const formatMarketCap = (value: number): string => {
-    if (value >= 1000000000) return `$${(value / 1000000000).toFixed(2)}B`;
-    if (value >= 1000000) return `$${(value / 1000000).toFixed(2)}M`;
-    if (value >= 1000) return `$${(value / 1000).toFixed(2)}K`;
-    return `$${value.toFixed(2)}`;
-  };
+  const formatPrice = (price: number): string => formatValue(price, false);
+  const formatYAxisValue = (value: number): string => formatValue(value, true);
+  const formatMarketCap = (value: number): string => formatValue(value, true);
 
   const getEvenlySpacedTimeTicks = (data: PriceDataPoint[] | MarketCapDataPoint[], count: number): number[] => {
     if (data.length === 0) return [];
@@ -526,14 +520,7 @@ export function TokenDetailModalContent({ token }: TokenDetailModalContentProps)
                       }}
                       formatter={(value) => {
                         if (typeof value !== 'number') return value;
-                        // Use same formatting as Y-axis for consistency
-                        if (value >= 1000000000) return `$${(value / 1000000000).toFixed(2)}B`;
-                        if (value >= 1000000) return `$${(value / 1000000).toFixed(2)}M`;
-                        if (value >= 1000) return `$${(value / 1000).toFixed(2)}K`;
-                        if (value >= 1) return `$${value.toFixed(2)}`;
-                        if (value >= 0.01) return `$${value.toFixed(2)}`;
-                        if (value >= 0.0001) return `$${value.toFixed(6)}`;
-                        return `$${value.toFixed(8)}`;
+                        return formatValue(value, true);
                       }}
                     />
                   }
@@ -619,14 +606,7 @@ export function TokenDetailModalContent({ token }: TokenDetailModalContentProps)
                       }}
                       formatter={(value) => {
                         if (typeof value !== 'number') return value;
-                        // Use same formatting as Y-axis for consistency
-                        if (value >= 1000000000) return `$${(value / 1000000000).toFixed(2)}B`;
-                        if (value >= 1000000) return `$${(value / 1000000).toFixed(2)}M`;
-                        if (value >= 1000) return `$${(value / 1000).toFixed(2)}K`;
-                        if (value >= 1) return `$${value.toFixed(2)}`;
-                        if (value >= 0.01) return `$${value.toFixed(2)}`;
-                        if (value >= 0.0001) return `$${value.toFixed(6)}`;
-                        return `$${value.toFixed(8)}`;
+                        return formatValue(value, true);
                       }}
                     />
                   }

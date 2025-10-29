@@ -20,7 +20,7 @@ export const checkTransactionConfirmationAction: Action = {
     "CHECK_TRANSACTION",
   ],
   description:
-    "Check the confirmation status of an Ethereum transaction including number of confirmations, success/failure status, gas used, and other transaction details. Automatically extracts transaction hash from the message.",
+    "Check the confirmation status of an EVM chain transaction including number of confirmations, success/failure status, gas used, and other transaction details. Automatically extracts transaction hash from the message.",
   
   // Parameter schema for tool calling
   parameters: {

@@ -707,7 +707,7 @@ function AppContent({
                   onClick={handleOpenAbout}
                 >
                   <Info className="size-4 md:size-5 text-muted-foreground" />
-                  <span className="text-sm md:text-base text-muted-foreground">About</span>
+                  <span className="text-sm md:text-base text-muted-foreground uppercase">ABOUT</span>
                 </button>
               </div>
               

@@ -1,7 +1,6 @@
 import {
   logger,
   validateUuid,
-  stringToUuid,
   type UUID,
   type ElizaOS,
   ChannelType,
@@ -18,6 +17,9 @@ import {
   type Job,
 } from '../../types/jobs';
 import internalMessageBus from '../../bus';
+
+// Import CDP facilitator helper for mainnet (if using Coinbase CDP)
+import { createFacilitatorConfig } from '@coinbase/x402';
 
 const DEFAULT_SERVER_ID = '00000000-0000-0000-0000-000000000000' as UUID;
 const DEFAULT_JOB_TIMEOUT_MS = 30000; // 30 seconds
@@ -114,7 +116,8 @@ function jobToResponse(job: Job): JobDetailsResponse {
 }
 
 /**
- * Validate CreateJobRequest (userId is now optional)
+ * Validate CreateJobRequest
+ * Note: userId is optional - x402 middleware handles payment validation
  */
 function isValidCreateJobRequest(obj: unknown): obj is CreateJobRequest {
   if (!obj || typeof obj !== 'object') {
@@ -130,42 +133,6 @@ function isValidCreateJobRequest(obj: unknown): obj is CreateJobRequest {
   );
 }
 
-/**
- * Extract payer address from x402 payment signature
- * The X-PAYMENT header contains base64-encoded JSON with payment payload
- */
-function extractPayerAddressFromPayment(req: express.Request): string | null {
-  const xPaymentHeader = req.headers['x-payment'] as string | undefined;
-  if (!xPaymentHeader) {
-    return null;
-  }
-
-  try {
-    // Decode base64-encoded JSON
-    const paymentPayload = JSON.parse(
-      Buffer.from(xPaymentHeader, 'base64').toString('utf-8')
-    );
-
-    // Extract the payer's address from the payload
-    // The structure may vary, but typically: payload.payload.from or payload.from
-    const payerAddress =
-      paymentPayload?.payload?.from ||
-      paymentPayload?.from ||
-      paymentPayload?.payload?.payer ||
-      paymentPayload?.payer;
-
-    if (typeof payerAddress === 'string' && payerAddress.startsWith('0x')) {
-      return payerAddress.toLowerCase();
-    }
-  } catch (error) {
-    logger.debug(
-      '[Jobs API] Failed to extract payer address from payment signature:',
-      error instanceof Error ? error.message : String(error)
-    );
-  }
-
-  return null;
-}
 
 /**
  * Extended Router interface with cleanup method
@@ -198,6 +165,29 @@ export function createJobsRouter(
   // Start cleanup interval when router is created
   startCleanupInterval();
 
+  // Configure x402 facilitator
+  // For mainnet: requires CDP_API_KEY_ID and CDP_API_KEY_SECRET
+  // For testnet: can use public facilitator without keys
+  const facilitatorUrl = process.env.X402_FACILITATOR_URL || 'https://facilitator.payai.network';
+  const apiKeyId = process.env.CDP_API_KEY_ID;
+  const apiKeySecret = process.env.CDP_API_KEY_SECRET;
+  
+  // Create facilitator config
+  let facilitatorConfig: unknown;
+  if (apiKeyId && apiKeySecret) {
+    // Use CDP auth for mainnet
+    facilitatorConfig = createFacilitatorConfig(apiKeyId, apiKeySecret);
+    logger.info(
+      `[Jobs API] Using x402 facilitator: ${facilitatorUrl} with CDP API keys for mainnet`
+    );
+  } else {
+    // Use URL-only for testnet
+    facilitatorConfig = { url: facilitatorUrl as `${string}://${string}` };
+    logger.info(
+      `[Jobs API] Using x402 public facilitator: ${facilitatorUrl} (testnet only)`
+    );
+  }
+
   // Cleanup function for the router
   router.cleanup = () => {
     stopCleanupInterval();
@@ -207,24 +197,25 @@ export function createJobsRouter(
 
   // Setup x402 payment middleware for jobs endpoint
   // Supports both Base and Polygon networks
-  let receivingWallet: string;
+  const receivingWallet = process.env.X402_RECEIVING_WALLET || '';
+  if (!receivingWallet) {
+    throw new Error(
+      '[Jobs API] X402_RECEIVING_WALLET is required. Payment protection must be enabled. ' +
+      'Set X402_RECEIVING_WALLET environment variable to your wallet address.'
+    );
+  }
+
   try {
-    receivingWallet = process.env.X402_RECEIVING_WALLET || '';
-    if (!receivingWallet) {
-      logger.warn(
-        '[Jobs API] X402_RECEIVING_WALLET not set. x402 payment support will not be available. ' +
-        'Set X402_RECEIVING_WALLET to enable payment processing.'
-      );
-    } else {
-      // Apply x402 payment middleware to POST /jobs endpoint
-      // Price: $0.02 per request
-      // Networks: Base and Polygon (Coinbase facilitator handles both)
-      router.use(
-        paymentMiddleware(receivingWallet as `0x${string}`, {
-          'POST /jobs': {
-            price: '$0.02',
-            network: 'base', // Primary network, facilitator handles multi-network
+    // Apply x402 payment middleware to POST /jobs endpoint only
+    // Price: $0.005 per request
+    // Network: Base mainnet with CDP facilitator  
+    router.use(
+      paymentMiddleware(receivingWallet as `0x${string}`, {
+        'POST /jobs': {
+          price: '$0.005',
+          network: 'base',
             config: {
+              resource: `http://localhost:${process.env.SERVER_PORT || '3000'}/api/messaging/jobs`,
               description:
                 'Access AI-powered research and news processing capabilities. ' +
                 'Submit queries for research analysis, news summarization, and information processing. ' +
@@ -235,7 +226,7 @@ export function createJobsRouter(
                   userId: {
                     type: 'string',
                     description:
-                      'Optional user identifier (UUID). If not provided, will be derived deterministically from the payment signature.',
+                      'Optional user identifier (UUID). If not provided, a random one will be generated for this session.',
                   },
                   prompt: {
                     type: 'string',
@@ -278,24 +269,29 @@ export function createJobsRouter(
               },
             },
           },
-        })
-      );
-      logger.info(
-        `[Jobs API] x402 payment middleware enabled. Receiving wallet: ${receivingWallet.substring(0, 10)}...`
-      );
-    }
+        },
+        facilitatorConfig as never
+      )
+    );
+    
+    logger.info(
+      `[Jobs API] x402 payment middleware enabled on POST /jobs. Receiving wallet: ${receivingWallet.substring(0, 10)}...`
+    );
   } catch (error) {
     logger.error(
       '[Jobs API] Failed to setup x402 payment middleware:',
       error instanceof Error ? error.message : String(error)
     );
-    // Continue without payment middleware if setup fails
+    throw new Error(
+      'x402 payment middleware setup failed. Server cannot start without payment protection. ' +
+      'Check X402_RECEIVING_WALLET, CDP_API_KEY_ID, and CDP_API_KEY_SECRET environment variables.'
+    );
   }
 
   /**
    * Create a new job (one-off message to agent)
    * POST /api/messaging/jobs
-   * Requires x402 payment ($0.02) - no JWT authentication
+   * Requires x402 payment ($0.005) - no JWT authentication
    */
   router.post(
     '/jobs',
@@ -311,7 +307,9 @@ export function createJobsRouter(
           });
         }
 
-        // Determine userId: either from request body or derive from payment signature
+        // Determine userId
+        // Note: x402-express middleware already validated payment before reaching here
+        // If userId is not provided, generate a random one for this paid request
         let userId: UUID;
         
         if (body.userId) {
@@ -325,21 +323,11 @@ export function createJobsRouter(
           }
           userId = validatedUserId;
         } else {
-          // Derive userId from payment signature
-          const payerAddress = extractPayerAddressFromPayment(req);
-          if (!payerAddress) {
-            return res.status(400).json({
-              success: false,
-              error:
-                'userId is required when payment signature is not available. ' +
-                'Either provide userId in request body or ensure X-PAYMENT header is present.',
-            });
-          }
-          
-          // Generate deterministic UUID from payer address
-          userId = stringToUuid(payerAddress);
+          // Generate a random userId for this paid session
+          // The payment was already validated by x402 middleware
+          userId = uuidv4() as UUID;
           logger.info(
-            `[Jobs API] Derived userId ${userId} from payment signature (payer: ${payerAddress.substring(0, 10)}...)`
+            `[Jobs API] Generated userId ${userId} for paid request`
           );
         }
 
@@ -603,6 +591,34 @@ export function createJobsRouter(
   );
 
   /**
+   * Health check endpoint
+   * GET /api/messaging/jobs/health
+   * Note: Must be defined before /jobs/:jobId to avoid conflict
+   */
+  router.get('/jobs/health', (_req: express.Request, res: express.Response) => {
+    const now = Date.now();
+    const statusCounts = {
+      pending: 0,
+      processing: 0,
+      completed: 0,
+      failed: 0,
+      timeout: 0,
+    };
+
+    for (const job of jobs.values()) {
+      statusCounts[job.status]++;
+    }
+
+    res.json({
+      healthy: true,
+      timestamp: now,
+      totalJobs: jobs.size,
+      statusCounts,
+      maxJobs: MAX_JOBS_IN_MEMORY,
+    });
+  });
+
+  /**
    * Get job details and status
    * GET /api/messaging/jobs/:jobId
    */
@@ -682,33 +698,6 @@ export function createJobsRouter(
       }
     }
   );
-
-  /**
-   * Health check endpoint
-   * GET /api/messaging/jobs/health
-   */
-  router.get('/jobs/health', (_req: express.Request, res: express.Response) => {
-    const now = Date.now();
-    const statusCounts = {
-      pending: 0,
-      processing: 0,
-      completed: 0,
-      failed: 0,
-      timeout: 0,
-    };
-
-    for (const job of jobs.values()) {
-      statusCounts[job.status]++;
-    }
-
-    res.json({
-      healthy: true,
-      timestamp: now,
-      totalJobs: jobs.size,
-      statusCounts,
-      maxJobs: MAX_JOBS_IN_MEMORY,
-    });
-  });
 
   return router;
 }

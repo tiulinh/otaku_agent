@@ -2,7 +2,7 @@
  * Test script for x402 payment integration with Jobs API (Base Mainnet)
  * 
  * CONFIGURATION (aligned with jobs.ts):
- * - Price: $0.005 USDC per request
+ * - Price: $0.015 USDC per request
  * - Network: Base mainnet
  * - Default job timeout: 3 minutes (180000ms)
  * - Maximum job timeout: 5 minutes (300000ms)
@@ -498,7 +498,7 @@ async function main(): Promise<void> {
   console.log(`  API URL: ${API_BASE_URL}`);
   console.log(`  Endpoint: ${JOBS_ENDPOINT}`);
   console.log(`  Network: Base Mainnet`);
-  console.log(`  Price: $0.005 USDC per request`);
+  console.log(`  Price: $0.015 USDC per request`);
   console.log(`  Job Timeout: 3 minutes (default), 5 minutes (max)`);
   console.log(`  Poll Timeout: ${(MAX_POLL_ATTEMPTS * POLL_INTERVAL_MS) / 1000}s (${MAX_POLL_ATTEMPTS} attempts × ${POLL_INTERVAL_MS / 1000}s)`);
 

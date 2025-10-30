@@ -145,11 +145,11 @@ export interface JobsRouter extends express.Router {
 /**
  * Creates the jobs router for one-off messaging with x402 payment support
  * 
- * This endpoint requires x402 payment ($0.005 per request) on Base mainnet.
+ * This endpoint requires x402 payment ($0.015 per request) on Base mainnet.
  * Payment is handled via Coinbase facilitator, which verifies and settles payments automatically.
  * 
  * Configuration:
- * - Price: $0.005 USDC per request
+ * - Price: $0.015 USDC per request
  * - Network: Base mainnet
  * - Default timeout: 3 minutes (180000ms)
  * - Maximum timeout: 5 minutes (300000ms)
@@ -214,12 +214,12 @@ export function createJobsRouter(
 
   try {
     // Apply x402 payment middleware to POST /jobs endpoint only
-    // Price: $0.005 per request
+    // Price: $0.015 per request
     // Network: Base mainnet with CDP facilitator  
     router.use(
       paymentMiddleware(receivingWallet as `0x${string}`, {
         'POST /jobs': {
-          price: '$0.005',
+          price: '$0.015',
           network: 'base',
             config: {
               resource: `http://localhost:${process.env.SERVER_PORT || '3000'}/api/messaging/jobs`,
@@ -227,7 +227,7 @@ export function createJobsRouter(
                 'Access AI-powered research and news processing capabilities. ' +
                 'Submit queries for research analysis, news summarization, and information processing. ' +
                 'Agents can perform deep research, fetch current news, analyze trends, and synthesize information from multiple sources. ' +
-                'Each request costs $0.005 USDC and supports payments on Base network via Coinbase facilitator.',
+                'Each request costs $0.015 USDC and supports payments on Base network via Coinbase facilitator.',
               inputSchema: {
                 bodyFields: {
                   userId: {
@@ -298,7 +298,7 @@ export function createJobsRouter(
   /**
    * Create a new job (one-off message to agent)
    * POST /api/messaging/jobs
-   * Requires x402 payment ($0.005) - no JWT authentication
+   * Requires x402 payment ($0.015) - no JWT authentication
    */
   router.post(
     '/jobs',

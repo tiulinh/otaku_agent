@@ -37,7 +37,7 @@ https://otaku.so
 **POST** `/api/messaging/jobs`
 
 **Configuration:**
-- **Price:** $0.005 USDC per request  
+- **Price:** $0.015 USDC per request  
 - **Network:** Base Mainnet  
 - **Payment Method:** x402 automatic payment
 - **Default Timeout:** 3 minutes (180 seconds)
@@ -293,7 +293,7 @@ If you get a 402 error, it means payment failed. Check:
 if (response.status === 402) {
   const error = await response.json();
   console.error('Payment required:', error);
-  console.log('Payment amount:', error.accepts[0].maxAmountRequired / 1_000_000, 'USDC');
+  console.log('Payment amount:', error.accepts[0].maxAmountRequired / 1_000_000, 'USDC'); // Should be 0.015
   console.log('Recipient:', error.accepts[0].payTo);
 }
 ```
@@ -384,7 +384,7 @@ Otaku can help you with:
 
 ## Rate Limits & Pricing
 
-- **Price per request:** $0.005 USDC
+- **Price per request:** $0.015 USDC
 - **Network:** Base Mainnet
 - **Payment asset:** USDC (`0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913`)
 - **Max jobs:** 10,000 concurrent jobs
@@ -454,7 +454,7 @@ console.log('USDC Balance:', Number(balance) / 1_000_000);
 
 1. **Check USDC balance on Base mainnet**
    ```bash
-   # Must have at least 0.005 USDC + gas
+   # Must have at least 0.015 USDC + gas
    ```
 
 2. **Verify you're using x402-fetch**

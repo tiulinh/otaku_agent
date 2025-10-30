@@ -6,9 +6,8 @@ import {
   ChannelType,
 } from '@elizaos/core';
 import express from 'express';
-import { v4 as uuidv4 } from 'uuid';
-// TODO: Install x402-express package to enable payment middleware
-// import { paymentMiddleware } from 'x402-express';
+import { v4 as uuidv4, v5 as uuidv5 } from 'uuid';
+import { paymentMiddleware } from 'x402-express';
 import type { AgentServer } from '../../index';
 import {
   JobStatus,
@@ -104,7 +103,7 @@ function jobToResponse(job: Job): JobDetailsResponse {
     status: job.status,
     agentId: job.agentId,
     userId: job.userId,
-    prompt: job.content,
+    prompt: job.prompt,
     createdAt: job.createdAt,
     expiresAt: job.expiresAt,
     result: job.result,
@@ -114,7 +113,7 @@ function jobToResponse(job: Job): JobDetailsResponse {
 }
 
 /**
- * Validate CreateJobRequest
+ * Validate CreateJobRequest (userId is now optional)
  */
 function isValidCreateJobRequest(obj: unknown): obj is CreateJobRequest {
   if (!obj || typeof obj !== 'object') {
@@ -124,10 +123,58 @@ function isValidCreateJobRequest(obj: unknown): obj is CreateJobRequest {
   const req = obj as Record<string, unknown>;
   return (
     (req.agentId === undefined || typeof req.agentId === 'string') &&
-    typeof req.userId === 'string' &&
-    typeof req.content === 'string' &&
-    req.content.length > 0
+    (req.userId === undefined || typeof req.userId === 'string') &&
+    typeof req.prompt === 'string' &&
+    req.prompt.length > 0
   );
+}
+
+/**
+ * Extract payer address from x402 payment signature
+ * The X-PAYMENT header contains base64-encoded JSON with payment payload
+ */
+function extractPayerAddressFromPayment(req: express.Request): string | null {
+  const xPaymentHeader = req.headers['x-payment'] as string | undefined;
+  if (!xPaymentHeader) {
+    return null;
+  }
+
+  try {
+    // Decode base64-encoded JSON
+    const paymentPayload = JSON.parse(
+      Buffer.from(xPaymentHeader, 'base64').toString('utf-8')
+    );
+
+    // Extract the payer's address from the payload
+    // The structure may vary, but typically: payload.payload.from or payload.from
+    const payerAddress =
+      paymentPayload?.payload?.from ||
+      paymentPayload?.from ||
+      paymentPayload?.payload?.payer ||
+      paymentPayload?.payer;
+
+    if (typeof payerAddress === 'string' && payerAddress.startsWith('0x')) {
+      return payerAddress.toLowerCase();
+    }
+  } catch (error) {
+    logger.debug(
+      '[Jobs API] Failed to extract payer address from payment signature:',
+      error instanceof Error ? error.message : String(error)
+    );
+  }
+
+  return null;
+}
+
+/**
+ * Generate deterministic UUID from a string using UUID v5
+ * Uses a fixed namespace UUID for jobs API
+ */
+function stringToUUID(input: string): UUID {
+  // Use a fixed namespace UUID for deterministic generation
+  // This ensures the same input always produces the same UUID
+  const NAMESPACE_UUID = '6ba7b810-9dad-11d1-80b4-00c04fd430c8'; // Standard DNS namespace
+  return uuidv5(input, NAMESPACE_UUID) as UUID;
 }
 
 /**
@@ -168,9 +215,8 @@ export function createJobsRouter(
     logger.info('[Jobs API] Router cleanup completed');
   };
 
-  // TODO: Setup x402 payment middleware for jobs endpoint when package is installed
+  // Setup x402 payment middleware for jobs endpoint
   // Supports both Base and Polygon networks
-  /*
   let receivingWallet: string;
   try {
     receivingWallet = process.env.X402_RECEIVING_WALLET || '';
@@ -199,9 +245,10 @@ export function createJobsRouter(
                 properties: {
                   userId: {
                     type: 'string',
-                    description: 'User identifier (UUID)',
+                    description:
+                      'Optional user identifier (UUID). If not provided, will be derived deterministically from the payment signature.',
                   },
-                  content: {
+                  prompt: {
                     type: 'string',
                     description:
                       'Query or prompt for research, news, or information processing',
@@ -219,7 +266,7 @@ export function createJobsRouter(
                     description: 'Optional metadata to attach to the job',
                   },
                 },
-                required: ['userId', 'content'],
+                required: ['prompt'],
               },
               outputSchema: {
                 type: 'object',
@@ -258,7 +305,6 @@ export function createJobsRouter(
     );
     // Continue without payment middleware if setup fails
   }
-  */
 
   /**
    * Create a new job (one-off message to agent)
@@ -275,17 +321,40 @@ export function createJobsRouter(
         if (!isValidCreateJobRequest(body)) {
           return res.status(400).json({
             success: false,
-            error: 'Invalid request. Required fields: userId, content',
+            error: 'Invalid request. Required fields: prompt',
           });
         }
 
-        // Validate userId
-        const userId = validateUuid(body.userId);
-        if (!userId) {
-          return res.status(400).json({
-            success: false,
-            error: 'Invalid userId format (must be valid UUID)',
-          });
+        // Determine userId: either from request body or derive from payment signature
+        let userId: UUID;
+        
+        if (body.userId) {
+          // Validate provided userId
+          const validatedUserId = validateUuid(body.userId);
+          if (!validatedUserId) {
+            return res.status(400).json({
+              success: false,
+              error: 'Invalid userId format (must be valid UUID)',
+            });
+          }
+          userId = validatedUserId;
+        } else {
+          // Derive userId from payment signature
+          const payerAddress = extractPayerAddressFromPayment(req);
+          if (!payerAddress) {
+            return res.status(400).json({
+              success: false,
+              error:
+                'userId is required when payment signature is not available. ' +
+                'Either provide userId in request body or ensure X-PAYMENT header is present.',
+            });
+          }
+          
+          // Generate deterministic UUID from payer address
+          userId = stringToUUID(payerAddress);
+          logger.info(
+            `[Jobs API] Derived userId ${userId} from payment signature (payer: ${payerAddress.substring(0, 10)}...)`
+          );
         }
 
         // Determine agent ID - use provided or first available agent
@@ -342,7 +411,7 @@ export function createJobsRouter(
           agentId,
           userId,
           channelId,
-          content: body.content,
+          prompt: body.prompt,
           status: JobStatus.PENDING,
           createdAt: now,
           expiresAt: now + timeoutMs,
@@ -396,9 +465,9 @@ export function createJobsRouter(
           const userMessage = await serverInstance.createMessage({
             channelId,
             authorId: userId,
-            content: body.content,
+            content: body.prompt,
             rawMessage: {
-              content: body.content,
+              content: body.prompt,
             },
             sourceType: 'job_request',
             metadata: {
@@ -420,10 +489,10 @@ export function createJobsRouter(
             channel_id: channelId,
             server_id: DEFAULT_SERVER_ID,
             author_id: userId,
-            content: body.content,
+            content: body.prompt,
             created_at: new Date(userMessage.createdAt).getTime(),
             source_type: 'job_request',
-            raw_message: { content: body.content },
+            raw_message: { content: body.prompt },
             metadata: {
               jobId,
               isJobMessage: true,

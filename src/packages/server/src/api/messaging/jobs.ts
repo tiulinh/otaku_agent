@@ -230,7 +230,7 @@ export function createJobsRouter(
       // Price: $0.02 per request
       // Networks: Base and Polygon (Coinbase facilitator handles both)
       router.use(
-        paymentMiddleware(receivingWallet, {
+        paymentMiddleware(receivingWallet as `0x${string}`, {
           'POST /jobs': {
             price: '$0.02',
             network: 'base', // Primary network, facilitator handles multi-network

@@ -477,8 +477,9 @@ export class AgentServer {
       this.app = express();
 
       // Trust proxy for accurate IP detection behind proxies (Railway, Cloudflare, etc.)
-      // This is required for express-rate-limit to work correctly with X-Forwarded-For headers
-      this.app.set('trust proxy', true);
+      // Set to 1 to trust only the first proxy (Railway)
+      // express-rate-limit requires a specific number or custom keyGenerator when trust proxy is enabled
+      this.app.set('trust proxy', 1);
 
       // Initialize Sentry (if configured) before any other middleware
       const DEFAULT_SENTRY_DSN =

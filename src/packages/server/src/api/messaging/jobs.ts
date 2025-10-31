@@ -176,15 +176,25 @@ export function createJobsRouter(
   // Default: Coinbase facilitator (automatically uses CDP_API_KEY_ID/CDP_API_KEY_SECRET if set)
   // For testnet: set X402_FACILITATOR_URL to https://x402.org/facilitator
   const facilitatorUrl = process.env.X402_FACILITATOR_URL;
+  const hasCdpKeys = !!(process.env.CDP_API_KEY_ID && process.env.CDP_API_KEY_SECRET);
   const facilitatorConfig = facilitatorUrl 
     ? { url: facilitatorUrl as `${string}://${string}` } // Custom facilitator (testnet)
     : facilitator; // Coinbase facilitator (mainnet) - uses CDP keys from env if available
   
-  logger.info(
-    facilitatorUrl 
-      ? `[Jobs API] Using custom x402 facilitator: ${facilitatorUrl}`
-      : `[Jobs API] Using Coinbase x402 facilitator (mainnet)`
-  );
+  if (facilitatorUrl) {
+    logger.info(`[Jobs API] Using custom x402 facilitator: ${facilitatorUrl}`);
+  } else {
+    logger.info(
+      `[Jobs API] Using Coinbase x402 facilitator (mainnet)` +
+      (hasCdpKeys ? ' with CDP API keys configured' : ' - WARNING: CDP_API_KEY_ID and CDP_API_KEY_SECRET not set')
+    );
+    if (!hasCdpKeys) {
+      logger.warn(
+        '[Jobs API] CDP_API_KEY_ID and CDP_API_KEY_SECRET are required for Coinbase facilitator on mainnet. ' +
+        'Payment verification may fail. Set these environment variables for production.'
+      );
+    }
+  }
 
   // Cleanup function for the router
   router.cleanup = () => {

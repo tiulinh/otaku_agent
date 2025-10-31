@@ -585,6 +585,11 @@ const messageReceivedHandler = async ({
 
     // Generate a new response ID
     const responseId = v4();
+    
+    // Check if this is a job request (x402 paid API)
+    // Job requests are isolated one-off operations that don't need race tracking
+    const isJobRequest = message.content.metadata?.isJobMessage === true;
+    
     // Get or create the agent-specific map
     if (!latestResponseIds.has(runtime.agentId)) {
       latestResponseIds.set(runtime.agentId, new Map<string, string>());
@@ -592,16 +597,24 @@ const messageReceivedHandler = async ({
     const agentResponses = latestResponseIds.get(runtime.agentId);
     if (!agentResponses) throw new Error('Agent responses map not found');
 
-    // Log when we're updating the response ID
-    const previousResponseId = agentResponses.get(message.roomId);
-    if (previousResponseId) {
-      logger.warn(
-        `[Bootstrap] Updating response ID for room ${message.roomId} from ${previousResponseId} to ${responseId} - this may discard in-progress responses`
+    // Only track response IDs for non-job messages
+    // Job requests bypass race tracking since they're isolated operations
+    if (!isJobRequest) {
+      // Log when we're updating the response ID
+      const previousResponseId = agentResponses.get(message.roomId);
+      if (previousResponseId) {
+        logger.warn(
+          `[Bootstrap] Updating response ID for room ${message.roomId} from ${previousResponseId} to ${responseId} - this may discard in-progress responses`
+        );
+      }
+
+      // Set this as the latest response ID for this agent+room
+      agentResponses.set(message.roomId, responseId);
+    } else {
+      runtime.logger.info(
+        `[Bootstrap] Job request detected for room ${message.roomId} - bypassing race tracking`
       );
     }
-
-    // Set this as the latest response ID for this agent+room
-    agentResponses.set(message.roomId, responseId);
 
     // Use runtime's run tracking for this message processing
     const runId = runtime.startRun();
@@ -755,12 +768,18 @@ const messageReceivedHandler = async ({
           state = result.state;
 
           // Race check before we send anything
-          const currentResponseId = agentResponses.get(message.roomId);
-          if (currentResponseId !== responseId) {
-            runtime.logger.info(
-              `Response discarded - newer message being processed for agent: ${runtime.agentId}, room: ${message.roomId}`
-            );
-            return;
+          // IMPORTANT: Bypass race check for job requests (x402 paid API)
+          // Job requests are one-off operations that must always complete
+          const isJobRequest = message.content.metadata?.isJobMessage === true;
+          
+          if (!isJobRequest) {
+            const currentResponseId = agentResponses.get(message.roomId);
+            if (currentResponseId !== responseId) {
+              runtime.logger.info(
+                `Response discarded - newer message being processed for agent: ${runtime.agentId}, room: ${message.roomId}`
+              );
+              return;
+            }
           }
 
           if (responseContent && message.id) {

@@ -4,6 +4,7 @@ import { validateChannelId } from '../api/shared/validation';
 
 /**
  * General API rate limiting middleware
+ * With trust proxy set to 1, express-rate-limit automatically handles X-Forwarded-For headers
  */
 export const createApiRateLimit = () => {
   return rateLimit({
@@ -18,21 +19,8 @@ export const createApiRateLimit = () => {
     },
     standardHeaders: true, // Return rate limit info in the `RateLimitInfo` headers
     legacyHeaders: false, // Disable the `X-RateLimit-*` headers
-    // Custom keyGenerator to safely handle proxy IPs when trust proxy is enabled
-    keyGenerator: (req) => {
-      // Use X-Forwarded-For header if available (when behind proxy)
-      // Otherwise fall back to req.ip (which respects trust proxy setting)
-      const forwarded = req.headers['x-forwarded-for'];
-      if (forwarded) {
-        // X-Forwarded-For can contain multiple IPs: "client, proxy1, proxy2"
-        // Take the first one (client IP)
-        const clientIp = typeof forwarded === 'string' 
-          ? forwarded.split(',')[0].trim() 
-          : forwarded[0]?.split(',')[0].trim();
-        return clientIp || req.ip || 'unknown';
-      }
-      return req.ip || 'unknown';
-    },
+    // No custom keyGenerator needed - express-rate-limit handles IP detection automatically
+    // when trust proxy is set (which we set to 1 in index.ts)
     handler: (req, res) => {
       const clientIp = req.ip || 'unknown';
       logger.warn(`[SECURITY] Rate limit exceeded for IP: ${clientIp}`);

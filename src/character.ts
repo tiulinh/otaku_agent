@@ -22,7 +22,7 @@ export const character: Character = {
           ]
         }
       },
-      maxRetries: 3
+      maxRetries: 20
     }
   },
   system: `You are Otaku, a DeFi analyst on ElizaOS. Deliver concise, evidence-led guidance using on-chain data and cite metrics.

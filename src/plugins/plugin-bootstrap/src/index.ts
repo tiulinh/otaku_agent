@@ -80,7 +80,11 @@ Determine the next step the assistant should take in this conversation to help t
 ## 1. Understand Current State & Intent
 - **Latest user message**: What is the user asking for RIGHT NOW? This is your primary objective.
 - **User's goal**: Is the user seeking comprehensive information, or a specific single answer?
-- **Consent for on-chain execution**: Decide whether the user wants live execution or just guidance. If the user issues a direct instruction (e.g., "Bridge 2 ETH now", "Swap 50 USDC to DAI"), you may proceed after verifying balances. If the wording is ambiguous or framed as a question ("How do I bridge...", "Can you help swap...?"), treat it as informational and ask whether they want you to execute before calling money-moving actions (EXECUTE_RELAY_BRIDGE, CDP swaps, transfers, FETCH_WITH_PAYMENT). When in doubt, ask for confirmation first.
+- **Consent for on-chain execution**: CRITICAL - Distinguish between questions and commands:
+  * **QUESTIONS = NO EXECUTION**: "How do I...", "Can you...", "Should I...", "What if I...", "How about...", "Could you..." → ALWAYS provide guidance/plan and explicitly ask "Want me to execute this?" or "Ready for me to submit?" - NEVER execute based on a question
+  * **DIRECT COMMANDS = MAY EXECUTE**: "Swap X to Y", "Bridge Z ETH", "Send A to B", "Transfer..." → May proceed after verifying balances
+  * **AMBIGUOUS = TREAT AS QUESTION**: When unsure, default to guidance first and ask for confirmation before calling money-moving actions (EXECUTE_RELAY_BRIDGE, CDP_WALLET_SWAP, CDP_WALLET_TOKEN_TRANSFER, CDP_WALLET_NFT_TRANSFER, CDP_WALLET_FETCH_WITH_PAYMENT)
+  * Example: "how do i turn all my weth to eth on main" → This is a QUESTION, provide the plan and ask for confirmation, DO NOT execute
 - **Actions taken THIS round**: Review ***Actions Completed in This Round*** below. What have YOU already executed in THIS execution?
 - **Completion check**: Has the user's request been ADEQUATELY fulfilled? Consider both breadth and depth of information provided.
 - **Multiple approaches (DeFi queries)**: For complex DeFi data queries, consider 2-3 different tool combinations that could satisfy the intent, then select the optimal path based on data freshness, coverage, and the specific question asked. Example: token analysis could use (a) screener + flows, (b) price + trades + holders, or (c) PnL leaderboard + counterparties. Choose the path that best matches user intent.
@@ -172,7 +176,11 @@ No actions have been executed yet in this round. This is your first decision ste
 
 6. **Ground in Evidence**: Parameters must come from the latest message, not assumptions
 
-7. **Consent Before Transactions**: Before triggering any action that moves funds or spends balance (EXECUTE_RELAY_BRIDGE, CDP_WALLET_SWAP, CDP_WALLET_TOKEN_TRANSFER, CDP_WALLET_NFT_TRANSFER, CDP_WALLET_FETCH_WITH_PAYMENT), make sure the user actually wants execution. Follow direct commands after balance checks, but if the request sounds exploratory or uncertain, respond with guidance and ask whether they want you to submit the transaction.
+7. **Consent Before Transactions**: Before triggering any action that moves funds or spends balance (EXECUTE_RELAY_BRIDGE, CDP_WALLET_SWAP, CDP_WALLET_TOKEN_TRANSFER, CDP_WALLET_NFT_TRANSFER, CDP_WALLET_FETCH_WITH_PAYMENT):
+   - **NEVER execute based on questions** - questions always mean guidance only
+   - Question indicators: "how do I", "can you", "should I", "what if", "how about", "could you" → Provide plan + ask "Want me to execute?"
+   - Direct command indicators: "swap", "bridge", "send", "transfer" (without question words) → May execute after balance verification
+   - **When uncertain about intent, default to guidance and ask for confirmation** - better to confirm twice than execute unwanted transactions
 
 8. **Preserve Gas Buffers**: When swapping or transferring the native gas token on any chain (e.g., ETH on Ethereum, POL/MATIC on Polygon, AVAX on Avalanche), never drain the entire balance. Leave a reasonable buffer (at least the estimated gas for two transactions) so the wallet can still pay for future fees. If the user asks to swap the full balance, warn them and suggest a slightly smaller amount that preserves gas.
 

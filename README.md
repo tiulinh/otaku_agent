@@ -162,6 +162,8 @@ Coinbase Developer Platform integration providing wallet and payment functionali
 - "Swap 100 USDC for ETH"
 - "Transfer NFT #123 from collection 0x..."
 
+**Further Reading:** See the x402 payments integration guide in [`docs/x402-payments.md`](./docs/x402-payments.md) for details on running paid jobs against `otaku.so` using automatic USDC payments.
+
 ### CoinGecko Plugin (plugin-coingecko)
 
 Real-time token prices, market data, and trending information.

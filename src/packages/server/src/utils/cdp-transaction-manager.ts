@@ -102,17 +102,30 @@ interface SendNFTResult {
 }
 
 // ============================================================================
-// CDP Transaction Manager Class
+// CDP Transaction Manager Class (Singleton)
 // ============================================================================
 
 export class CdpTransactionManager {
+  private static instance: CdpTransactionManager | null = null;
+  
   private cdpClient: CdpClient | null = null;
   private tokensCache = new Map<string, CacheEntry<any>>();
   private nftsCache = new Map<string, CacheEntry<any>>();
   private readonly CACHE_TTL = 300 * 1000; // 5 minutes
 
-  constructor() {
+  // Private constructor to prevent direct instantiation
+  private constructor() {
     this.initializeCdpClient();
+  }
+
+  /**
+   * Get the singleton instance of CdpTransactionManager
+   */
+  public static getInstance(): CdpTransactionManager {
+    if (!CdpTransactionManager.instance) {
+      CdpTransactionManager.instance = new CdpTransactionManager();
+    }
+    return CdpTransactionManager.instance;
   }
 
   // ============================================================================
@@ -2095,6 +2108,4 @@ export class CdpTransactionManager {
   }
 }
 
-// Export singleton instance
-export const cdpTransactionManager = new CdpTransactionManager();
 

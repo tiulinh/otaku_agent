@@ -1,6 +1,6 @@
 import { IAgentRuntime, Service, logger } from "@elizaos/core";
 import { type CdpNetwork } from "../types";
-import { CdpTransactionManager } from "../../../managers/cdp-transaction-manager";
+import { CdpTransactionManager } from "@/managers/cdp-transaction-manager";
 
 interface WalletToken {
   symbol: string;
@@ -42,6 +42,7 @@ export class CdpService extends Service {
   constructor(runtime: IAgentRuntime) {
     super(runtime);
     this.transactionManager = CdpTransactionManager.getInstance();
+    console.log('222222222222222222222222222 CdpService', !!this.transactionManager);
   }
 
   static async start(runtime: IAgentRuntime): Promise<CdpService> {

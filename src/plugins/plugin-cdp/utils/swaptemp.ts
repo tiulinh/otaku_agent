@@ -10,7 +10,7 @@ import {
   UNISWAP_POOL_FEES,
   isCdpSwapSupported,
   getNativeTokenInfo,
-} from "../constants/chains";
+} from "@/constants/chains";
 import { TX_CONFIRMATION_TIMEOUT, waitForTxConfirmation } from "../constants/timeouts";
 import type { CdpNetwork } from "../types";
 

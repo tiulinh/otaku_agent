@@ -2,7 +2,7 @@
   "$schema": "https://json.schemastore.org/tsconfig",
   "compilerOptions": {
     "isolatedModules": false,
-    "baseUrl": ".",
+    "baseUrl": "../..",
     "module": "ESNext",
     "allowSyntheticDefaultImports": true,
     "esModuleInterop": true,
@@ -21,7 +21,11 @@
     "resolveJsonModule": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
-    "allowUnusedLabels": true
+    "allowUnusedLabels": true,
+    "paths": {
+      "@/managers/*": ["managers/*"],
+      "@/constants/*": ["constants/*"]
+    }
   },
   "include": ["src/**/*.ts", "src/**/*.tsx", "../../**/*.ts", "../../**/*.tsx"],
   "exclude": ["node_modules", "dist"]

@@ -3,14 +3,16 @@ import { logger } from '@elizaos/core';
 import type { AgentServer } from '../../index';
 import { sendError, sendSuccess } from '../shared/response-utils';
 import { requireAuth, type AuthenticatedRequest } from '../../middleware';
-import { CdpTransactionManager } from '../../../../../managers/cdp-transaction-manager';
-import { MAINNET_NETWORKS } from '../../../../../constants/chains';
+import { CdpTransactionManager } from '@/managers/cdp-transaction-manager';
+import { MAINNET_NETWORKS } from '@/constants/chains';
 
 export function cdpRouter(_serverInstance: AgentServer): express.Router {
   const router = express.Router();
 
   // Get the singleton instance of CdpTransactionManager
   const cdpTransactionManager = CdpTransactionManager.getInstance();
+
+  console.log('11111111 111111111111111111111111111 cdpRouter', !!cdpTransactionManager);
 
   // SECURITY: Require authentication for all CDP wallet operations
   router.use(requireAuth);

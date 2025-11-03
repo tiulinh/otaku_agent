@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { X, Copy, Check, Send, ExternalLink } from 'lucide-react';
 import { Button } from '../../ui/button';
 import { useModal } from '../../../contexts/ModalContext';
+import { useLoadingPanel } from '../../../contexts/LoadingPanelContext';
 import { elizaClient } from '../../../lib/elizaClient';
 
 // NFT interface
@@ -29,6 +30,7 @@ interface NFTDetailModalContentProps {
 
 export function NFTDetailModalContent({ nft, userId, onSuccess }: NFTDetailModalContentProps) {
   const { hideModal, showModal } = useModal();
+  const { showLoading, showSuccess, showError } = useLoadingPanel();
   const modalId = 'nft-detail-modal';
   const [isCopied, setIsCopied] = useState(false);
   const [showSendForm, setShowSendForm] = useState(false);
@@ -100,11 +102,11 @@ export function NFTDetailModalContent({ nft, userId, onSuccess }: NFTDetailModal
         type: nft.tokenType,
       });
 
-      // Show loading modal
-      showModal(
-        <NFTSendingModal />,
-        'nft-sending',
-        { showCloseButton: false, className: 'max-w-md' }
+      // Show loading state
+      showLoading(
+        'Sending NFT...',
+        'Please wait while your transaction is being processed',
+        modalId
       );
 
       const result = await elizaClient.cdp.sendNFT({
@@ -116,16 +118,18 @@ export function NFTDetailModalContent({ nft, userId, onSuccess }: NFTDetailModal
 
       console.log(' NFT sent successfully:', result);
       
-      // Show success modal
-      showModal(
-        <NFTSuccessModal 
-          nft={nft}
-          txHash={result.transactionHash}
-          getTxExplorerUrl={getTxExplorerUrl}
-        />,
-        'nft-success',
-        { showCloseButton: false, className: 'max-w-md' }
+      // Show success state
+      showSuccess(
+        'NFT Sent Successfully!',
+        `Your ${nft.name || `${nft.contractName} #${nft.tokenId}`} has been sent`,
+        modalId,
+        false // Don't auto-close
       );
+      
+      // Reset form
+      setShowSendForm(false);
+      setRecipientAddress('');
+      setAmount('1');
       
       // Call success callback after a short delay
       if (onSuccess) {
@@ -135,8 +139,8 @@ export function NFTDetailModalContent({ nft, userId, onSuccess }: NFTDetailModal
       }
     } catch (err: any) {
       console.error(' NFT send failed:', err);
-      setError(err.message || 'Failed to send NFT');
-      hideModal('nft-sending');
+      const errorMessage = err instanceof Error ? err.message : 'Failed to send NFT';
+      showError('Transaction Failed', errorMessage, modalId);
     }
   };
 
@@ -320,66 +324,6 @@ export function NFTDetailModalContent({ nft, userId, onSuccess }: NFTDetailModal
           </div>
         )}
       </div>
-    </div>
-  );
-}
-
-// Loading modal component
-function NFTSendingModal() {
-  return (
-    <div className="text-center space-y-4">
-      <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-primary mx-auto"></div>
-      <div>
-        <h3 className="text-lg font-semibold mb-2">Sending NFT...</h3>
-        <p className="text-sm text-muted-foreground">
-          Please wait while your transaction is being processed
-        </p>
-      </div>
-    </div>
-  );
-}
-
-// Success modal component
-function NFTSuccessModal({ 
-  nft, 
-  txHash,
-  getTxExplorerUrl 
-}: { 
-  nft: NFT; 
-  txHash: string;
-  getTxExplorerUrl: (hash: string, chain: string) => string;
-}) {
-  const { hideModal } = useModal();
-  
-  return (
-    <div className="text-center space-y-4">
-      <div className="w-16 h-16 bg-green-500/10 rounded-full flex items-center justify-center mx-auto">
-        <Check className="w-8 h-8 text-green-500" />
-      </div>
-      <div>
-        <h3 className="text-lg font-semibold mb-2">NFT Sent Successfully!</h3>
-        <p className="text-sm text-muted-foreground">
-          Your {nft.name || `${nft.contractName} #${nft.tokenId}`} has been sent
-        </p>
-      </div>
-      
-      <div className="bg-muted rounded-lg p-3 space-y-2">
-        <div className="text-xs text-muted-foreground">Transaction Hash</div>
-        <code className="text-xs font-mono break-all block">{txHash}</code>
-      </div>
-
-      <Button
-        onClick={() => window.open(getTxExplorerUrl(txHash, nft.chain), '_blank')}
-        variant="outline"
-        className="w-full"
-      >
-        <ExternalLink className="w-4 h-4 mr-2" />
-        View on Explorer
-      </Button>
-
-      <Button onClick={() => hideModal('nft-success')} className="w-full">
-        Close
-      </Button>
     </div>
   );
 }

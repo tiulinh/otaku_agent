@@ -5,7 +5,8 @@
 
 import type { BuildConfig, BunPlugin } from 'bun';
 import { existsSync, watch, type FSWatcher } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 export interface ElizaBuildOptions {
   /** Package root directory */
@@ -47,6 +48,23 @@ export function getTimer() {
     elapsedMs: () => {
       const end = performance.now();
       return Math.round(end - start);
+    },
+  };
+}
+
+/**
+ * Creates a path alias resolver plugin for Bun.build
+ * Resolves @/ paths to be external imports that will be resolved at runtime
+ */
+export function createPathAliasPlugin(rootDir: string): BunPlugin {
+  return {
+    name: 'path-alias-resolver',
+    setup(build) {
+      build.onResolve({ filter: /^@\// }, (args) => {
+        // Leave the import as-is but mark it as external
+        // The package.json "imports" field will resolve it at runtime
+        return { path: args.path, external: true };
+      });
     },
   };
 }
@@ -128,6 +146,9 @@ export async function createElizaBuildConfig(options: ElizaBuildOptions): Promis
     (ext) => ext && !ext.startsWith('//') && ext.trim() !== ''
   );
 
+  // Add path alias plugin to all builds
+  const allPlugins = [createPathAliasPlugin(root), ...plugins];
+
   const config: BuildConfig = {
     entrypoints: resolvedEntrypoints,
     outdir,
@@ -138,7 +159,7 @@ export async function createElizaBuildConfig(options: ElizaBuildOptions): Promis
     sourcemap,
     minify,
     external: [...nodeExternals, ...elizaExternals, ...cleanExternals],
-    plugins,
+    plugins: allPlugins,
     naming: {
       entry: '[dir]/[name].[ext]',
       chunk: '[name]-[hash].[ext]',

@@ -683,22 +683,7 @@ function AppContent({
             <div className="flex flex-col relative w-full gap-1 min-h-0 h-full">
               {/* Header */}
               <div className="flex items-center lg:items-baseline gap-2.5 md:gap-4 px-4 md:px-6 py-3 md:pb-4 lg:pt-7 ring-2 ring-pop sticky top-header-mobile lg:top-0 bg-background z-10">
-                {/* {(agent as any)?.settings?.avatar ? (
-                  <div className="rounded size-7 md:size-9 overflow-hidden shrink-0 my-auto">
-                    <img 
-                      src={(agent as any).settings.avatar as string} 
-                      alt={agent?.name || 'Agent'}
-                      className="w-full h-full object-cover"
-                    />
-                  </div>
-                ) : (
-                  <div className="rounded bg-primary size-7 md:size-9 flex items-center justify-center my-auto shrink-0">
-                    <MessageSquare className="opacity-50 md:opacity-100 size-4 md:size-5" />
-                  </div>
-                )} */}
-                {/* <div className="rounded bg-primary size-7 md:size-9 flex items-center justify-center my-auto shrink-0"/> */}
-                <h1 className="text-xl lg:text-4xl font-display leading-none mb-1">
-                  {/* Title removed as per UI requirements */}
+               <h1 className="text-xl lg:text-4xl font-display leading-none mb-1">
                   CHAT
                 </h1>
                 <button 

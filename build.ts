@@ -4,13 +4,63 @@
  */
 
 import { existsSync } from 'node:fs';
-import { rm } from 'node:fs/promises';
+import { rm, cp, mkdir } from 'node:fs/promises';
 import { $ } from 'bun';
+import { resolve, dirname } from 'node:path';
 
 async function cleanBuild(outdir = 'dist') {
   if (existsSync(outdir)) {
     await rm(outdir, { recursive: true, force: true });
     console.log(` Cleaned ${outdir} directory`);
+  }
+}
+
+async function copySharedModules() {
+  console.log(' Copying shared modules...');
+  
+  // Copy and compile managers directory to dist/managers
+  if (existsSync('./src/managers')) {
+    await cp('./src/managers', './dist/managers', { recursive: true });
+    console.log(' Copied managers/');
+  }
+  
+  // Copy and compile constants directory to dist/constants
+  if (existsSync('./src/constants')) {
+    await cp('./src/constants', './dist/constants', { recursive: true });
+    console.log(' Copied constants/');
+  }
+  
+  // Compile the TypeScript files in place
+  try {
+    console.log(' Compiling shared modules...');
+    
+    // Build managers
+    const managersResult = await Bun.build({
+      entrypoints: ['./dist/managers/cdp-transaction-manager.ts'],
+      outdir: './dist/managers',
+      target: 'node',
+      format: 'esm',
+      external: ['@elizaos/core', '@coinbase/cdp-sdk', 'viem', 'viem/accounts'],
+      naming: { entry: '[name].js' },
+    });
+    
+    // Build constants
+    const constantsResult = await Bun.build({
+      entrypoints: ['./dist/constants/chains.ts'],
+      outdir: './dist/constants',
+      target: 'node',
+      format: 'esm',
+      external: ['viem/chains'],
+      naming: { entry: '[name].js' },
+    });
+    
+    if (managersResult.success && constantsResult.success) {
+      console.log(' Shared modules compiled successfully');
+    } else {
+      console.warn(' Warning: Some shared modules failed to compile');
+    }
+  } catch (error) {
+    console.warn(' Warning: Failed to compile shared modules:', error);
   }
 }
 
@@ -50,6 +100,20 @@ async function build() {
           naming: {
             entry: '[dir]/[name].[ext]',
           },
+          // Add path resolution plugin to handle @/ aliases
+          plugins: [
+            {
+              name: 'path-alias-resolver',
+              setup(build) {
+                build.onResolve({ filter: /^@\// }, (args) => {
+                  // Make these imports external and rewrite them to relative paths from dist/
+                  const relativePath = args.path.slice(2); // Remove "@/"
+                  // Return as external with the rewritten path
+                  return { path: `./${relativePath}.js`, external: true };
+                });
+              },
+            },
+          ],
         });
 
         if (!result.success) {
@@ -81,6 +145,9 @@ async function build() {
     if (!buildResult.success) {
       return false;
     }
+
+    // Copy shared modules after build
+    await copySharedModules();
 
     const elapsed = ((performance.now() - start) / 1000).toFixed(2);
     console.log(` Backend build complete! (${elapsed}s)`);

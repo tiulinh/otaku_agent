@@ -2,14 +2,14 @@
   "$schema": "https://json.schemastore.org/tsconfig",
   "compilerOptions": {
     "isolatedModules": false,
-    "baseUrl": ".",
+    "baseUrl": "../..",
     "module": "ESNext",
     "allowSyntheticDefaultImports": true,
     "esModuleInterop": true,
     "target": "ESNext",
     "lib": ["ESNext", "DOM", "DOM.Iterable"],
     "jsx": "react-jsx",
-    "rootDir": "src",
+    "rootDir": "../..",
     "moduleResolution": "bundler",
     "outDir": "./dist",
     "skipLibCheck": true,
@@ -21,8 +21,12 @@
     "resolveJsonModule": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
-    "allowUnusedLabels": true
+    "allowUnusedLabels": true,
+    "paths": {
+      "@/managers/*": ["managers/*"],
+      "@/constants/*": ["constants/*"]
+    }
   },
-  "include": ["src/**/*.ts", "src/**/*.tsx"],
+  "include": ["src/**/*.ts", "src/**/*.tsx", "../../**/*.ts", "../../**/*.tsx"],
   "exclude": ["node_modules", "dist"]
 }

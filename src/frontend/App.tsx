@@ -616,6 +616,10 @@ function AppContent({
   const { setOpenMobile } = useSidebar();
   const { showModal, hideModal } = useModal();
 
+  useEffect(() => {
+    setOpenMobile(false);
+  }, [currentView])
+
   const handleOpenAbout = () => {
     showModal(
       <AboutModalContent onClose={() => hideModal(ABOUT_MODAL_ID)} />,
@@ -629,17 +633,15 @@ function AppContent({
     );
   };
 
-  const handleNewChatWithSidebarClose = () => {
+  const onNewChat = () => {
     handleNewChat();
     setCurrentView('chat');
-    // Close mobile sidebar
     setOpenMobile(false);
   };
 
-  const handleChannelSelectWithSidebarClose = (id: string) => {
+  const onChannelSelect = (id: string) => {
     handleChannelSelect(id);
     setCurrentView('chat');
-    // Close mobile sidebar
     setOpenMobile(false);
   };
 
@@ -660,8 +662,8 @@ function AppContent({
           <DashboardSidebar
             channels={channels}
             activeChannelId={activeChannelId}
-            onChannelSelect={handleChannelSelectWithSidebarClose}
-            onNewChat={handleNewChatWithSidebarClose}
+            onChannelSelect={onChannelSelect}
+            onNewChat={onNewChat}
             isCreatingChannel={isCreatingChannel}
             userProfile={userProfile}
             onSignOut={signOut}
@@ -672,7 +674,7 @@ function AppContent({
         </div>
 
         {/* Center - Chat Interface / Account */}
-        <div className="col-span-1 lg:col-span-7 h-full overflow-hidden">
+        <div className="col-span-1 lg:col-span-7 h-full overflow-auto lg:overflow-hidden">
           {currentView === 'account' ? (
             <AccountPage 
               totalBalance={totalBalance} 

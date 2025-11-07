@@ -254,7 +254,11 @@ export class CdpTransactionManager {
         accountName: userId,
       };
     } catch (error) {
-      logger.error('[CdpTransactionManager] getOrCreateWallet failed:', JSON.stringify(error, null, 2));
+      logger.error('[CdpTransactionManager] getOrCreateWallet failed - Error name:', error instanceof Error ? error.name : 'Unknown');
+      logger.error('[CdpTransactionManager] getOrCreateWallet failed - Error message:', error instanceof Error ? error.message : String(error));
+      logger.error('[CdpTransactionManager] getOrCreateWallet failed - Error stack:', error instanceof Error ? error.stack : 'No stack');
+      logger.error('[CdpTransactionManager] getOrCreateWallet failed - Error keys:', error ? Object.keys(error) : []);
+      logger.error('[CdpTransactionManager] getOrCreateWallet failed - Full error:', error);
       throw error;
     }
   }

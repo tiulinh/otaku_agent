@@ -27,7 +27,7 @@
     "@coinbase/cdp-core": "latest",
     "@coinbase/cdp-hooks": "latest",
     "@coinbase/cdp-react": "latest",
-    "@coinbase/cdp-sdk": "^1.38.4",
+    "@coinbase/cdp-sdk": "^1.38.5",
     "@coinbase/x402": "^0.7.1",
     "@elizaos/api-client": "workspace:*",
     "@elizaos/cli": "latest",
@@ -60,6 +60,7 @@
     "@tanstack/react-query": "^5.29.0",
     "@tavily/core": "^0.5.12",
     "axios": "^1.13.1",
+    "clanker-sdk": "^4.1.14",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cors": "^2.8.5",
@@ -81,8 +82,7 @@
     "x402-express": "^0.7.1",
     "x402-fetch": "^0.7.0",
     "zod": "^4.1.12",
-    "zustand": "^5.0.8",
-    "clanker-sdk": "^4.1.14"
+    "zustand": "^5.0.8"
   },
   "devDependencies": {
     "@biomejs/biome": "1.5.3",

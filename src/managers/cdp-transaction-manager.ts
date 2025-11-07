@@ -238,16 +238,21 @@ export class CdpTransactionManager {
 
   async getOrCreateWallet(userId: string): Promise<{ address: string; accountName: string }> {
     logger.info(`[CdpTransactionManager] Getting/creating wallet for user: ${userId.substring(0, 8)}...`);
-    
-    const client = this.getCdpClient();
-    const account = await client.evm.getOrCreateAccount({ name: userId });
-    
-    logger.info(`[CdpTransactionManager] Wallet ready: ${account.address}`);
-    
-    return {
-      address: account.address,
-      accountName: userId,
-    };
+
+    try {
+      const client = this.getCdpClient();
+      const account = await client.evm.getOrCreateAccount({ name: userId });
+
+      logger.info(`[CdpTransactionManager] Wallet ready: ${account.address}`);
+
+      return {
+        address: account.address,
+        accountName: userId,
+      };
+    } catch (error) {
+      logger.error('[CdpTransactionManager] getOrCreateWallet failed:', JSON.stringify(error, null, 2));
+      throw error;
+    }
   }
 
   /**

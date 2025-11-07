@@ -145,12 +145,15 @@ export class CdpTransactionManager {
     const apiKeySecret = process.env.CDP_API_KEY_SECRET;
     const walletSecret = process.env.CDP_WALLET_SECRET;
 
+    logger.info(`[CdpTransactionManager] Initializing CDP client with credentials present: apiKeyId=${!!apiKeyId}, apiKeySecret=${!!apiKeySecret}, walletSecret=${!!walletSecret}`);
+
     if (!apiKeyId || !apiKeySecret || !walletSecret) {
       logger.warn('[CdpTransactionManager] Missing CDP credentials in environment variables');
       return;
     }
 
     try {
+      logger.info('[CdpTransactionManager] Creating new CdpClient instance...');
       this.cdpClient = new CdpClient({
         apiKeyId,
         apiKeySecret,
@@ -159,6 +162,7 @@ export class CdpTransactionManager {
       logger.info('[CdpTransactionManager] CDP client initialized successfully');
     } catch (error) {
       logger.error('[CdpTransactionManager] Failed to initialize CDP client:', error instanceof Error ? error.message : String(error));
+      logger.error('[CdpTransactionManager] Error stack:', error instanceof Error ? error.stack : undefined);
     }
   }
 

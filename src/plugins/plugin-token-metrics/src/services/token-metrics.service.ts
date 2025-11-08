@@ -39,11 +39,16 @@ export class TokenMetricsService extends Service {
   private baseUrl = "https://api.tokenmetrics.com/v2";
 
   async initialize(runtime: IAgentRuntime): Promise<void> {
+    console.log("===== TOKEN METRICS SERVICE INITIALIZE CALLED =====");
+    console.log(`Service type: ${TokenMetricsService.serviceType}`);
+
     this.apiKey = runtime.getSetting("TOKENMETRICS_API_KEY") || "";
 
     if (!this.apiKey) {
+      console.log("[TokenMetrics] WARNING: API key not configured");
       logger.warn("[TokenMetrics] API key not configured");
     } else {
+      console.log("[TokenMetrics] Service initialized successfully with API key");
       logger.info("[TokenMetrics] Service initialized");
     }
   }

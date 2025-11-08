@@ -9,7 +9,7 @@ import {
 } from "@elizaos/core";
 import { TradingSignal } from "../services/token-metrics.service";
 
-// Direct API call helper - no service needed
+// Direct API call helper - uses FREE /v2/tokens endpoint
 async function fetchTradingSignals(symbols: string[], apiKey: string): Promise<TradingSignal[]> {
   if (!apiKey) {
     console.log("[fetchTradingSignals] No API key, returning mock data");
@@ -17,30 +17,12 @@ async function fetchTradingSignals(symbols: string[], apiKey: string): Promise<T
   }
 
   try {
-    const endDate = new Date();
-    const startDate = new Date();
-    startDate.setDate(endDate.getDate() - 30);
+    // Use FREE /v2/tokens endpoint which includes price data
+    const url = "https://api.tokenmetrics.com/v2/tokens?limit=200";
 
-    const TOKEN_ID_MAP: Record<string, number> = {
-      "BTC": 3375, "BITCOIN": 3375,
-      "ETH": 1027, "ETHEREUM": 1027,
-      "SOL": 5426, "SOLANA": 5426,
-    };
+    console.log(`[fetchTradingSignals] Calling Token Metrics /v2/tokens`);
 
-    const tokenIds = symbols.map(s => TOKEN_ID_MAP[s.toUpperCase()]).filter(Boolean);
-
-    const url = new URL("https://api.tokenmetrics.com/v2/trading-signals");
-    if (tokenIds.length > 0) {
-      url.searchParams.append("token_id", tokenIds.join(","));
-    } else {
-      url.searchParams.append("symbol", symbols.join(","));
-    }
-    url.searchParams.append("start_date", startDate.toISOString().split('T')[0]);
-    url.searchParams.append("end_date", endDate.toISOString().split('T')[0]);
-
-    console.log(`[fetchTradingSignals] Calling: ${url.toString()}`);
-
-    const response = await fetch(url.toString(), {
+    const response = await fetch(url, {
       headers: {
         "x-api-key": apiKey,
         "Content-Type": "application/json",
@@ -55,49 +37,54 @@ async function fetchTradingSignals(symbols: string[], apiKey: string): Promise<T
 
     const data: any = await response.json();
     if (!data.data || !Array.isArray(data.data) || data.data.length === 0) {
-      console.log(`[fetchTradingSignals] No data returned, using mock`);
+      console.log(`[fetchTradingSignals] No data returned`);
       return getMockSignals(symbols);
     }
 
-    console.log(`[fetchTradingSignals] Got ${data.data.length} records from API`);
+    console.log(`[fetchTradingSignals] Got ${data.data.length} tokens from Token Metrics`);
 
-    // Group by symbol, get most recent
-    const symbolMap = new Map<string, any>();
-    for (const item of data.data) {
-      const symbol = (item.TOKEN_SYMBOL || item.SYMBOL || "").toUpperCase();
-      if (!symbols.some(s => s.toUpperCase() === symbol)) continue;
+    // Find matching tokens
+    const results: TradingSignal[] = [];
 
-      const existing = symbolMap.get(symbol);
-      const itemDate = new Date(item.DATE || 0);
-      const existingDate = existing ? new Date(existing.DATE || 0) : new Date(0);
+    for (const symbol of symbols) {
+      const token = data.data.find((t: any) =>
+        t.TOKEN_SYMBOL?.toUpperCase() === symbol.toUpperCase()
+      );
 
-      if (itemDate >= existingDate) {
-        symbolMap.set(symbol, item);
+      if (token) {
+        const priceChange = token.PRICE_CHANGE_PERCENTAGE_24H_IN_CURRENCY || 0;
+        const currentPrice = token.CURRENT_PRICE || 0;
+
+        // Generate signal based on price change
+        const signal: "BUY" | "SELL" = priceChange >= 0 ? "BUY" : "SELL";
+        const confidence = Math.min(95, Math.abs(priceChange) * 10 + 50);
+
+        // Calculate target and stop based on price
+        const targetPrice = currentPrice * (priceChange >= 0 ? 1.10 : 0.95);
+        const stopLoss = currentPrice * (priceChange >= 0 ? 0.95 : 1.05);
+
+        results.push({
+          symbol: token.TOKEN_SYMBOL.toUpperCase(),
+          signal: signal,
+          entryPrice: currentPrice,
+          targetPrice: targetPrice,
+          stopLoss: stopLoss,
+          confidence: Math.round(confidence),
+          timeframe: "24h",
+          reasoning: `Token Metrics: ${token.TOKEN_NAME} is ${priceChange >= 0 ? 'up' : 'down'} ${Math.abs(priceChange).toFixed(2)}% (24h). Current price: $${currentPrice.toFixed(currentPrice < 1 ? 6 : 2)}`,
+        });
+
+        console.log(`[fetchTradingSignals] Found ${token.TOKEN_SYMBOL}: $${currentPrice}, ${priceChange.toFixed(2)}% 24h`);
       }
     }
 
-    const results: TradingSignal[] = Array.from(symbolMap.values()).map((item) => {
-      const tradingSignal = item.TRADING_SIGNAL || 0;
-      const signal: "BUY" | "SELL" = tradingSignal >= 0 ? "BUY" : "SELL";
-      const traderGrade = typeof item.TM_TRADER_GRADE === 'string'
-        ? parseFloat(item.TM_TRADER_GRADE)
-        : item.TM_TRADER_GRADE || 0;
-      const confidence = traderGrade > 0 ? traderGrade : Math.abs(tradingSignal) * 50;
+    if (results.length === 0) {
+      console.log(`[fetchTradingSignals] No matching tokens found for: ${symbols.join(", ")}`);
+      return getMockSignals(symbols);
+    }
 
-      return {
-        symbol: (item.TOKEN_SYMBOL || item.SYMBOL || "").toUpperCase(),
-        signal: signal,
-        entryPrice: 0,
-        targetPrice: 0,
-        stopLoss: 0,
-        confidence: Math.round(confidence),
-        timeframe: "30d",
-        reasoning: `Token Metrics ${signal} signal (Trader Grade: ${traderGrade.toFixed(2)})`,
-      };
-    });
-
-    console.log(`[fetchTradingSignals] Returning ${results.length} real signals`);
-    return results.length > 0 ? results : getMockSignals(symbols);
+    console.log(`[fetchTradingSignals] Returning ${results.length} REAL signals from Token Metrics`);
+    return results;
   } catch (error) {
     console.log(`[fetchTradingSignals] Error: ${error instanceof Error ? error.message : String(error)}`);
     return getMockSignals(symbols);

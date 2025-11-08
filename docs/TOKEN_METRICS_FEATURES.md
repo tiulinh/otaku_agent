@@ -76,23 +76,106 @@ tokenMetrics: {
 `src/plugins/plugin-token-metrics/src/actions/getTradingSignals.action.ts`
 
 ### Mục Đích
-Cung cấp tín hiệu giao dịch chi tiết bao gồm:
-- **Tín hiệu** (Signal): MUA/BÁN/GIỮ
-- **Độ tin cậy** (Confidence): 0-100%
-- **Điểm vào** (Entry Price): Giá mua đề xuất
-- **Điểm thoát** (Exit Price): Giá bán đề xuất
-- **Cắt lỗ** (Stop Loss): Mức giá dừng lỗ
-- **Khung thời gian** (Timeframe): Ngắn hạn/Trung hạn/Dài hạn
+Cung cấp tín hiệu giao dịch chi tiết với dữ liệu THỰC từ Token Metrics API:
+- **Giá hiện tại** (Current Price): Từ Token Metrics `tokens.get()` và `price.get()`
+- **Khối lượng 24h** (24h Volume): Khối lượng giao dịch thực tế
+- **Vốn hóa thị trường** (Market Cap): Market cap hiện tại
+- **Tín hiệu** (Signal): MUA/BÁN (dựa trên price momentum)
+- **Độ tin cậy** (Confidence): 55-95% (tính từ momentum, volume, market cap)
+- **Điểm vào** (Entry Price): Giá hiện tại
+- **Target Price**: Resistance level (nếu có) hoặc tính từ volatility
+- **Stop Loss**: Support level (nếu có) hoặc tính từ volatility
+- **Dự báo giá** (Price Prediction): Từ `pricePrediction.get()` (paid tier)
 
-### Cách Hoạt Động
+### Cách Hoạt Động - Phiên Bản Mới (v2.0)
+
+#### Luồng Dữ Liệu
 ```
-User → Frontend → Action → TokenMetricsService → API Token Metrics → Response
+User → Action → Token Metrics SDK → Multi-endpoint Strategy → Response
 ```
 
-1. User nhập: "Lấy tín hiệu giao dịch cho SOL"
-2. Action gọi `TokenMetricsService.getTradingSignals(["SOL"])`
-3. Service gọi API: `https://api.tokenmetrics.com/v2/trading-signals?symbols=SOL`
-4. Trả về tín hiệu giao dịch với điểm vào/thoát
+#### Các Bước Chi Tiết
+
+**Bước 1: Lấy dữ liệu cơ bản (FREE tier)**
+```typescript
+// 1.1 Lấy thông tin token (price, market cap, volume)
+const tokensResult = await client.tokens.get({ symbol: "BTC,ETH,SOL" });
+
+// 1.2 Lấy giá chính xác hơn
+const priceResult = await client.price.get({ symbol: "BTC,ETH,SOL" });
+```
+
+**Bước 2: Thử lấy support/resistance (PAID tier - tự động fallback)**
+```typescript
+for (const symbol of symbols) {
+  try {
+    // 2.1 Thử lấy resistance/support levels
+    const rsResult = await client.resistanceSupport.get({ symbol });
+    if (rsResult.success) {
+      // ✅ Có data → Sử dụng real support/resistance
+      resistanceSupportMap.set(symbol, rsResult.data[0]);
+    }
+  } catch (err) {
+    // ⚠️ 401 Unauthorized → FREE tier không có → Bỏ qua
+    console.log("resistanceSupport unavailable");
+  }
+
+  try {
+    // 2.2 Thử lấy price prediction
+    const ppResult = await client.pricePrediction.get({ symbol });
+    if (ppResult.success) {
+      // ✅ Có data → Thêm predicted price vào reasoning
+      pricePredictionMap.set(symbol, ppResult.data[0]);
+    }
+  } catch (err) {
+    // ⚠️ 401 Unauthorized → FREE tier không có → Bỏ qua
+    console.log("pricePrediction unavailable");
+  }
+}
+```
+
+**Bước 3: Tính toán tín hiệu**
+```typescript
+// 3.1 Generate signal từ price momentum
+const signal = priceChange24h >= 0 ? "BUY" : "SELL";
+
+// 3.2 Tính confidence từ market data
+const momentumScore = Math.abs(priceChange24h) * 5;  // max 40
+const volumeScore = Math.log10(volume24h / 1e6) * 2; // max 20
+const capScore = Math.log10(marketCap / 1e9) * 3;    // max 25
+const confidence = 50 + momentumScore + volumeScore + capScore; // 55-95%
+
+// 3.3 Tính target/stop - PREFER API data, FALLBACK to calculation
+if (rsData && rsData.resistance && rsData.support) {
+  // ✅ Có resistance/support từ API → SỬ DỤNG REAL DATA
+  targetPrice = signal === "BUY" ? rsData.resistance : rsData.support;
+  stopLoss = signal === "BUY" ? rsData.support : rsData.resistance;
+} else {
+  // ⚠️ Không có API data → Fallback volatility calculation
+  const volatility = Math.abs(priceChange24h) / 100;
+  targetPrice = currentPrice * (1 + volatility * 1.5);
+  stopLoss = currentPrice * (1 - volatility * 0.8);
+}
+
+// 3.4 Thêm price prediction nếu có
+if (ppData && ppData.predicted_price) {
+  predictionInfo = ` | Predicted: $${ppData.predicted_price}`;
+}
+```
+
+### Chiến Lược Multi-Tier
+
+| Endpoint | FREE Tier | PAID Tier | Fallback Strategy |
+|----------|-----------|-----------|-------------------|
+| `tokens.get()` | ✅ Hoạt động | ✅ Hoạt động | N/A (required) |
+| `price.get()` | ✅ Hoạt động | ✅ Hoạt động | N/A (required) |
+| `resistanceSupport.get()` | ❌ 401 | ✅ Hoạt động | Volatility calculation |
+| `pricePrediction.get()` | ❌ 401 | ✅ Hoạt động | Không thêm prediction |
+
+**Lợi ích:**
+- ✅ Code KHÔNG CẦN UPDATE khi nâng cấp plan
+- ✅ Tự động chuyển từ fallback → real data khi API có quyền
+- ✅ Luôn hoạt động (không bao giờ lỗi do missing endpoints)
 
 ### Ví Dụ Sử Dụng
 ```
@@ -102,18 +185,29 @@ User: "Có nên mua ETH không?"
 ```
 
 ### Kết Quả Hiển Thị
+
+**FREE Tier (Hiện tại):**
 ```
-📡 Tín Hiệu Giao Dịch: SOL
+Token Metrics Analysis - 1 token(s):
 
-🟢 Tín hiệu: MUA
-✅ Độ tin cậy: 78%
-
-💰 Điểm vào: $95.50
-🎯 Điểm thoát: $110.00 (+15.2%)
-🛑 Cắt lỗ: $88.00 (-7.9%)
-
-⏰ Khung thời gian: Trung hạn (2-4 tuần)
+🟢 DOGE: BUY
+   Price: $0.174136 | Target: $0.174136 | Stop: $0.174136
+   Confidence: 61% | Token Metrics: Dogecoin @ $0.174136 | 24h: 0.00% | Vol: $2964.6M | MCap: $26.42B
 ```
+
+**PAID Tier (Sau khi nâng cấp - tự động kích hoạt):**
+```
+Token Metrics Analysis - 1 token(s):
+
+🟢 SOL: BUY
+   Price: $95.50 | Target: $110.00 | Stop: $88.00
+   Confidence: 78% | Token Metrics: Solana @ $95.50 | 24h: +5.2% | Vol: $1250.3M | MCap: $42.1B | Predicted: $105.00
+```
+
+**Giải thích sự khác biệt:**
+- FREE tier: Target/Stop = Current Price (do volatility = 0% hoặc dùng fallback calculation)
+- PAID tier: Target = Resistance ($110), Stop = Support ($88) từ `resistanceSupport.get()`
+- PAID tier có thêm: "| Predicted: $105.00" từ `pricePrediction.get()`
 
 ### Tích Hợp Frontend
 ```typescript
@@ -483,12 +577,126 @@ socket.on('messageBroadcast', (data) => {
 
 ## So Sánh 4 Features
 
-| Feature | File | Input | Output | Tích hợp CDP |
-|---------|------|-------|--------|--------------|
-| **Token Analysis** | `getTokenAnalysis.action.ts` | Token symbols (BTC, ETH) | Điểm AI, rủi ro, khuyến nghị | ❌ Không |
-| **Trading Signals** | `getTradingSignals.action.ts` | Token symbols | Tín hiệu MUA/BÁN, điểm vào/thoát | ❌ Không |
-| **Portfolio Recommendations** | `getPortfolioRecommendations.action.ts` | Mức độ rủi ro | Danh sách token và % phân bổ | ❌ Không |
-| **Auto Trading** | `executeAutoTrade.action.ts` | Token + số tiền | Transaction hash | ✅ Có (CDP SWAP) |
+| Feature | File | Input | Output | Data Source | Tích hợp CDP |
+|---------|------|-------|--------|-------------|--------------|
+| **Token Analysis** | `getTokenAnalysis.action.ts` | Token symbols | Điểm AI, rủi ro, khuyến nghị | MOCK (cần implement) | ❌ Không |
+| **Trading Signals** | `getTradingSignals.action.ts` | Token symbols | Giá thực, tín hiệu, target/stop | ✅ REAL (Token Metrics SDK) | ❌ Không |
+| **Portfolio Recommendations** | `getPortfolioRecommendations.action.ts` | Mức độ rủi ro | Danh sách token và % phân bổ | MOCK (cần implement) | ❌ Không |
+| **Auto Trading** | `executeAutoTrade.action.ts` | Token + số tiền | Transaction hash | Dựa vào Trading Signals | ✅ Có (CDP SWAP) |
+
+### Chi Tiết Data Sources
+
+**Trading Signals (✅ IMPLEMENTED với REAL data):**
+```typescript
+// FREE Tier - Hoạt động 100%
+✅ tokens.get()      → Price, Market Cap, Volume, 24h Change
+✅ price.get()       → Current Price (chính xác hơn)
+
+// PAID Tier - Auto-upgrade khi có quyền
+⚠️ resistanceSupport.get() → Support/Resistance (401 → fallback)
+⚠️ pricePrediction.get()   → Price Prediction (401 → không hiển thị)
+```
+
+**Token Analysis & Portfolio (❌ MOCK - chưa implement):**
+- Hiện đang trả về dữ liệu giả
+- Cần implement logic gọi API Token Metrics thực tế
+- Hoặc loại bỏ nếu không cần thiết
+
+---
+
+## Upgrade Path: FREE → PAID Tier
+
+### Khi Nào Nên Nâng Cấp?
+
+**Vẫn dùng FREE tier nếu:**
+- ✅ Chỉ cần giá hiện tại, volume, market cap
+- ✅ Tự tính toán target/stop loss dựa trên volatility
+- ✅ Không cần AI prediction chính xác
+
+**Nâng cấp lên PAID tier để:**
+- 🎯 Có resistance/support levels THỰC từ technical analysis
+- 📈 Có price prediction từ AI model của Token Metrics
+- 🔥 Access thêm nhiều endpoints: `tmGrades`, `tradingSignals`, `aiAgent`, etc.
+
+### Quy Trình Nâng Cấp
+
+**Bước 1: Nâng cấp tài khoản Token Metrics**
+```
+1. Vào https://tokenmetrics.com/pricing
+2. Chọn gói PAID (Professional hoặc Enterprise)
+3. Thanh toán và nhận API key mới (hoặc key cũ sẽ được upgrade)
+```
+
+**Bước 2: KHÔNG CẦN UPDATE CODE!**
+```
+✅ Code đã được thiết kế để tự động detect
+✅ Khi API trả về data (thay vì 401), code tự động sử dụng
+✅ Không cần rebuild, redeploy, hoặc thay đổi bất cứ thứ gì
+```
+
+**Bước 3: Verify nâng cấp thành công**
+```bash
+# Test endpoint trên terminal
+cd /tmp
+cat > test-upgrade.ts << 'EOF'
+const { TokenMetricsClient } = require('tmai-api');
+const client = new TokenMetricsClient(process.env.TOKENMETRICS_API_KEY);
+
+// Test resistance/support
+const rs = await client.resistanceSupport.get({ symbol: 'BTC' });
+console.log("Resistance/Support:", rs.success ? "✅ WORKING" : "❌ STILL 401");
+
+// Test price prediction
+const pp = await client.pricePrediction.get({ symbol: 'BTC' });
+console.log("Price Prediction:", pp.success ? "✅ WORKING" : "❌ STILL 401");
+EOF
+
+bun run test-upgrade.ts
+```
+
+**Kết quả mong đợi sau upgrade:**
+```
+Resistance/Support: ✅ WORKING
+Price Prediction: ✅ WORKING
+```
+
+**Trên UI, bạn sẽ thấy:**
+```
+TRƯỚC (FREE tier):
+🟢 DOGE: BUY
+   Price: $0.174136 | Target: $0.174136 | Stop: $0.174136
+   Confidence: 61% | Token Metrics: Dogecoin @ $0.174136 | ...
+
+SAU (PAID tier):
+🟢 DOGE: BUY
+   Price: $0.174136 | Target: $0.185000 | Stop: $0.165000
+   Confidence: 61% | Token Metrics: Dogecoin @ $0.174136 | ... | Predicted: $0.180000
+```
+
+### Lợi Ích Tự Động Nhận Được
+
+| Feature | FREE Tier | PAID Tier (Auto-activated) |
+|---------|-----------|----------------------------|
+| Current Price | ✅ Real data | ✅ Real data |
+| Volume & Market Cap | ✅ Real data | ✅ Real data |
+| Signal (BUY/SELL) | ✅ Calculated | ✅ Calculated |
+| Confidence Score | ✅ Calculated | ✅ Calculated |
+| Target Price | ⚠️ Volatility-based | ✅ **Resistance level** |
+| Stop Loss | ⚠️ Volatility-based | ✅ **Support level** |
+| Price Prediction | ❌ Not shown | ✅ **AI Prediction** |
+| Reasoning Text | ✅ Basic | ✅ **Enhanced with prediction** |
+
+**Không cần:**
+- ❌ Update code
+- ❌ Rebuild plugin
+- ❌ Redeploy Railway
+- ❌ Restart server
+- ❌ Clear cache
+
+**Chỉ cần:**
+- ✅ Upgrade Token Metrics account
+- ✅ Đợi vài phút API key propagate
+- ✅ Test trên UI → Thấy target/stop khác current price ngay!
 
 ---
 

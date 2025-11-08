@@ -12,7 +12,7 @@
     "dev": "turbo run build && bun run start-server.ts",
     "dev:watch": "turbo run dev --parallel",
     "start": "bun run start-server.ts",
-    "build": "turbo run build && bun run build:backend && bun run build:frontend",
+    "build": "rm -rf .turbo node_modules/.cache && turbo run build --force && bun run build:backend && bun run build:frontend",
     "build:all": "turbo run build",
     "build:backend": "bun run build.ts",
     "build:frontend": "vite build",

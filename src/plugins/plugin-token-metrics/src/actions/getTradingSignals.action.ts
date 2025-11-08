@@ -158,11 +158,22 @@ export const getTradingSignalsAction: Action = {
 
       const summaryLines = results.map((r) => {
         const emoji = r.signal === "BUY" ? "🟢" : r.signal === "SELL" ? "🔴" : "🟡";
-        return `${emoji} ${r.symbol}: ${r.signal} | Entry: $${r.entryPrice.toFixed(2)} | Target: $${r.targetPrice.toFixed(2)} | Stop: $${r.stopLoss.toFixed(2)} | Confidence: ${r.confidence.toFixed(0)}%`;
+        const priceDisplay = r.entryPrice >= 1
+          ? `$${r.entryPrice.toFixed(2)}`
+          : `$${r.entryPrice.toFixed(6)}`;
+        const targetDisplay = r.targetPrice >= 1
+          ? `$${r.targetPrice.toFixed(2)}`
+          : `$${r.targetPrice.toFixed(6)}`;
+        const stopDisplay = r.stopLoss >= 1
+          ? `$${r.stopLoss.toFixed(2)}`
+          : `$${r.stopLoss.toFixed(6)}`;
+
+        return `${emoji} ${r.symbol}: ${r.signal}\n   Price: ${priceDisplay} | Target: ${targetDisplay} | Stop: ${stopDisplay}\n   Confidence: ${r.confidence}% | ${r.reasoning}`;
       });
 
       const text = [
-        `Trading Signals for ${results.length} token(s):`,
+        `Token Metrics Analysis - ${results.length} token(s):`,
+        "",
         ...summaryLines,
       ].join("\n");
 

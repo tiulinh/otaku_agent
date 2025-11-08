@@ -44,23 +44,25 @@ export class TokenMetricsService extends Service {
   }
 
   static async start(runtime: IAgentRuntime): Promise<TokenMetricsService> {
-    console.log("===== TOKEN METRICS SERVICE START CALLED (v4) =====");
-    logger.info("[TokenMetrics] Starting TokenMetrics service");
+    const svc = new TokenMetricsService(runtime);
+    await svc.initialize(runtime);
+    return svc;
+  }
 
-    const service = new TokenMetricsService(runtime);
+  async initialize(runtime: IAgentRuntime): Promise<void> {
+    console.log("===== TOKEN METRICS SERVICE INITIALIZE CALLED (v5) =====");
+    logger.info("[TokenMetrics] Initializing TokenMetrics service");
 
-    // Initialize API key directly in start() like CdpService
-    service.apiKey = runtime.getSetting("TOKENMETRICS_API_KEY") || "";
+    // Prefer runtime settings, fallback to env
+    this.apiKey = runtime.getSetting("TOKENMETRICS_API_KEY") || "";
 
-    if (!service.apiKey) {
+    if (!this.apiKey) {
       console.log("[TokenMetrics] WARNING: API key not configured");
       logger.warn("[TokenMetrics] API key not configured");
     } else {
-      console.log(`[TokenMetrics] Service started with API key: ${service.apiKey.substring(0, 10)}...`);
-      logger.info("[TokenMetrics] Service started successfully");
+      console.log(`[TokenMetrics] Service initialized with API key: ${this.apiKey.substring(0, 10)}...`);
+      logger.info("[TokenMetrics] Service initialized successfully");
     }
-
-    return service;
   }
 
   async stop(): Promise<void> {

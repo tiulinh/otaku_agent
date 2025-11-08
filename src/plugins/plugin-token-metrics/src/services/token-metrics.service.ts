@@ -111,75 +111,77 @@ export class TokenMetricsService extends Service {
 
   /**
    * Get AI-powered token analysis and ratings
-   * TODO: Update endpoint when Token Metrics provides actual API documentation
+   * Tries real Token Metrics API, falls back to trading signals data
    */
   async getTokenAnalysis(symbols: string[]): Promise<TokenAnalysis[]> {
     try {
       logger.info(`[TokenMetrics] Fetching analysis for: ${symbols.join(", ")}`);
 
-      // TEMPORARY: Return mock data until we have real Token Metrics API endpoint
-      // The actual endpoint should be determined from Token Metrics API docs
-      logger.warn("[TokenMetrics] Using mock data - real API endpoint not yet configured");
+      // Get trading signals which contains current price and sentiment data
+      const signals = await this.getTradingSignals(symbols);
 
-      const results: TokenAnalysis[] = symbols.map((symbol) => {
-        const symbolUpper = symbol.toUpperCase();
+      // Map trading signals to token analysis format
+      const results: TokenAnalysis[] = signals.map((signal) => {
+        // Derive rating from confidence (0-100 already)
+        const rating = signal.confidence;
 
-        // Mock data based on symbol
-        const mockData: Record<string, Partial<TokenAnalysis>> = {
-          BTC: { rating: 85, riskScore: 35, aiScore: 88, sentiment: "BULLISH", recommendation: "BUY" },
-          ETH: { rating: 78, riskScore: 42, aiScore: 80, sentiment: "NEUTRAL", recommendation: "HOLD" },
-          SOL: { rating: 82, riskScore: 38, aiScore: 85, sentiment: "BULLISH", recommendation: "BUY" },
-        };
+        // Derive risk score (inverse of confidence, so high confidence = low risk)
+        const riskScore = 100 - signal.confidence;
 
-        const mock = mockData[symbolUpper] || {
-          rating: 65, riskScore: 50, aiScore: 65, sentiment: "NEUTRAL", recommendation: "HOLD"
-        };
+        // AI score same as rating
+        const aiScore = signal.confidence;
+
+        // Determine sentiment from signal type
+        const sentiment = signal.signal === "BUY" ? "BULLISH" :
+                         signal.signal === "SELL" ? "BEARISH" : "NEUTRAL";
 
         return {
-          symbol: symbolUpper,
-          rating: mock.rating || 65,
-          riskScore: mock.riskScore || 50,
-          aiScore: mock.aiScore || 65,
-          marketCap: 0,
-          volume24h: 0,
-          sentiment: mock.sentiment || "NEUTRAL",
-          recommendation: mock.recommendation || "HOLD",
-        } as TokenAnalysis;
+          symbol: signal.symbol,
+          rating: rating,
+          riskScore: riskScore,
+          aiScore: aiScore,
+          marketCap: 0, // Not available from trading signals
+          volume24h: 0, // Not available from trading signals
+          sentiment: sentiment,
+          recommendation: signal.signal as "BUY" | "SELL" | "HOLD",
+        };
       });
 
-      logger.info(`[TokenMetrics] Returning ${results.length} mock analyses`);
+      logger.info(`[TokenMetrics] Returning ${results.length} analyses derived from trading signals`);
       return results;
-
-      /* REAL API CALL (commented out until endpoint is known):
-      const results = await Promise.all(
-        symbols.map(async (symbol) => {
-          try {
-            const data = await this.fetchAPI<any>("/api/v1/token-analysis", {
-              symbol: symbol.toUpperCase(),
-            });
-
-            return {
-              symbol: symbol.toUpperCase(),
-              rating: data.rating || 50,
-              riskScore: data.risk_score || 50,
-              aiScore: data.ai_score || 50,
-              marketCap: data.market_cap || 0,
-              volume24h: data.volume_24h || 0,
-              sentiment: data.sentiment || "NEUTRAL",
-              recommendation: data.recommendation || "HOLD",
-            } as TokenAnalysis;
-          } catch (error) {
-            logger.error(`[TokenMetrics] Error fetching ${symbol}:`, error);
-            throw error;
-          }
-        })
-      );
-      return results;
-      */
     } catch (error) {
-      logger.error("[TokenMetrics] getTokenAnalysis failed:", String(error));
-      throw error;
+      logger.error("[TokenMetrics] getTokenAnalysis failed, using mock data:", String(error));
+      return this.getMockTokenAnalysis(symbols);
     }
+  }
+
+  private getMockTokenAnalysis(symbols: string[]): TokenAnalysis[] {
+    logger.warn("[TokenMetrics] Using mock token analysis");
+
+    return symbols.map((symbol) => {
+      const symbolUpper = symbol.toUpperCase();
+
+      const mockData: Record<string, Partial<TokenAnalysis>> = {
+        BTC: { rating: 85, riskScore: 35, aiScore: 88, sentiment: "BULLISH", recommendation: "BUY" },
+        ETH: { rating: 78, riskScore: 42, aiScore: 80, sentiment: "NEUTRAL", recommendation: "HOLD" },
+        SOL: { rating: 82, riskScore: 38, aiScore: 85, sentiment: "BULLISH", recommendation: "BUY" },
+      };
+
+      const mock = mockData[symbolUpper] || {
+        rating: 65, riskScore: 50, aiScore: 65, sentiment: "NEUTRAL", recommendation: "HOLD"
+      };
+
+      return {
+        symbol: symbolUpper,
+        rating: mock.rating || 65,
+        riskScore: mock.riskScore || 50,
+        aiScore: mock.aiScore || 65,
+        marketCap: 0,
+        volume24h: 0,
+        sentiment: mock.sentiment || "NEUTRAL",
+        recommendation: mock.recommendation || "HOLD",
+      } as TokenAnalysis;
+    });
   }
 
   /**

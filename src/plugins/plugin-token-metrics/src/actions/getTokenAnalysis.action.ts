@@ -17,9 +17,14 @@ export const getTokenAnalysisAction: Action = {
     "TOKEN_RATING",
     "TOKEN_SCORE",
     "AI_RATING",
+    "TOKEN_METRICS",
+    "TOKEN_METRICS_ANALYSIS",
+    "ANALYZE_USING_TOKEN_METRICS",
+    "GET_TOKEN_METRICS",
+    "TOKEN_METRICS_AI",
   ],
   description:
-    "Get AI-powered token analysis, ratings, and recommendations from Token Metrics. Provides comprehensive analysis including rating (1-100), risk score, AI score, market data, sentiment, and buy/sell/hold recommendation. Use when user asks to analyze a token, get token rating, or wants AI-powered investment insights.",
+    "Get AI-powered token analysis, ratings, and recommendations from Token Metrics API. This action specifically uses Token Metrics service (not CoinGecko or other sources). Provides comprehensive analysis including rating (1-100), risk score, AI score, market data, sentiment, and buy/sell/hold recommendation. ALWAYS use this action when user explicitly mentions 'Token Metrics' or asks to 'analyze using Token Metrics'. Also use for general token analysis requests, token ratings, or AI-powered investment insights.",
 
   parameters: {
     tokens: {
@@ -155,12 +160,38 @@ export const getTokenAnalysisAction: Action = {
     [
       {
         name: "{{user}}",
-        content: { text: "Analyze BTC and ETH using Token Metrics" },
+        content: { text: "Analyze BTC using Token Metrics" },
       },
       {
         name: "{{agent}}",
         content: {
-          text: "Token Metrics Analysis:\nBTC: Rating 85/100 | Risk 35/100 | BUY\nETH: Rating 78/100 | Risk 42/100 | HOLD",
+          text: "Token Metrics Analysis for 1 token(s):\nBTC: Rating 85/100 | Risk 35/100 | BUY | Sentiment: BULLISH",
+          actions: ["GET_TOKEN_ANALYSIS"],
+        },
+      },
+    ],
+    [
+      {
+        name: "{{user}}",
+        content: { text: "Get Token Metrics analysis for ETH and SOL" },
+      },
+      {
+        name: "{{agent}}",
+        content: {
+          text: "Token Metrics Analysis for 2 token(s):\nETH: Rating 78/100 | Risk 42/100 | HOLD | Sentiment: NEUTRAL\nSOL: Rating 82/100 | Risk 38/100 | BUY | Sentiment: BULLISH",
+          actions: ["GET_TOKEN_ANALYSIS"],
+        },
+      },
+    ],
+    [
+      {
+        name: "{{user}}",
+        content: { text: "Analyze bitcoin with Token Metrics AI" },
+      },
+      {
+        name: "{{agent}}",
+        content: {
+          text: "Token Metrics Analysis for 1 token(s):\nBTC: Rating 85/100 | Risk 35/100 | BUY | Sentiment: BULLISH",
           actions: ["GET_TOKEN_ANALYSIS"],
         },
       },

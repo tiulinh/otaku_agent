@@ -16,9 +16,12 @@ export const getTradingSignalsAction: Action = {
     "TRADE_SIGNALS",
     "BUY_SELL_SIGNALS",
     "ENTRY_EXIT_POINTS",
+    "TOKEN_METRICS_SIGNALS",
+    "GET_TOKEN_METRICS_SIGNALS",
+    "TRADING_SIGNAL",
   ],
   description:
-    "Get AI-powered trading signals with entry price, target price, stop-loss levels, and confidence scores from Token Metrics. Use when user asks for trading signals, entry/exit points, or wants to know when to buy/sell a token.",
+    "Get AI-powered trading signals with entry price, target price, stop-loss levels, and confidence scores from Token Metrics API. This action specifically uses Token Metrics service for trading signals. Use when user asks for trading signals, entry/exit points, or wants to know when to buy/sell a token. Also use when user mentions 'Token Metrics' with signals.",
 
   parameters: {
     tokens: {
@@ -136,12 +139,25 @@ export const getTradingSignalsAction: Action = {
     [
       {
         name: "{{user}}",
-        content: { text: "Get trading signals for BTC and ETH" },
+        content: { text: "Get trading signals for SOL" },
       },
       {
         name: "{{agent}}",
         content: {
-          text: "🟢 BTC: BUY | Entry: $45,000 | Target: $50,000 | Stop: $43,000 | Confidence: 85%",
+          text: "Trading Signals for 1 token(s):\n🟢 SOL: BUY | Entry: $95.50 | Target: $110.00 | Stop: $88.00 | Confidence: 78%",
+          actions: ["GET_TRADING_SIGNALS"],
+        },
+      },
+    ],
+    [
+      {
+        name: "{{user}}",
+        content: { text: "Show me trading signals for BTC and ETH from Token Metrics" },
+      },
+      {
+        name: "{{agent}}",
+        content: {
+          text: "Trading Signals for 2 token(s):\n🟢 BTC: BUY | Entry: $45,000 | Target: $50,000 | Stop: $43,000 | Confidence: 85%\n🟡 ETH: HOLD | Entry: $3,200 | Target: $3,500 | Stop: $3,000 | Confidence: 65%",
           actions: ["GET_TRADING_SIGNALS"],
         },
       },

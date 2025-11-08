@@ -33,10 +33,14 @@ export interface PortfolioRecommendation {
 }
 
 export class TokenMetricsService extends Service {
-  static serviceType: ServiceType = "token-metrics" as ServiceType;
+  static serviceType = "token-metrics";
 
-  private apiKey: string;
+  private apiKey: string = "";
   private baseUrl = "https://api.tokenmetrics.com/v2";
+
+  get capabilityDescription(): string {
+    return "AI-powered token analysis, trading signals, portfolio recommendations, and auto-trading capabilities from Token Metrics API";
+  }
 
   async initialize(runtime: IAgentRuntime): Promise<void> {
     console.log("===== TOKEN METRICS SERVICE INITIALIZE CALLED =====");
@@ -51,6 +55,10 @@ export class TokenMetricsService extends Service {
       console.log("[TokenMetrics] Service initialized successfully with API key");
       logger.info("[TokenMetrics] Service initialized");
     }
+  }
+
+  async stop(): Promise<void> {
+    logger.info("[TokenMetrics] Service stopped");
   }
 
   private async fetchAPI<T>(endpoint: string, params: Record<string, string> = {}): Promise<T> {
@@ -146,7 +154,7 @@ export class TokenMetricsService extends Service {
       return results;
       */
     } catch (error) {
-      logger.error("[TokenMetrics] getTokenAnalysis failed:", error);
+      logger.error("[TokenMetrics] getTokenAnalysis failed:", String(error));
       throw error;
     }
   }
@@ -166,12 +174,12 @@ export class TokenMetricsService extends Service {
 
         const mockSignals: Record<string, Partial<TradingSignal>> = {
           BTC: { signal: "BUY", entryPrice: 45000, targetPrice: 50000, stopLoss: 43000, confidence: 85, timeframe: "7d" },
-          ETH: { signal: "HOLD", entryPrice: 3200, targetPrice: 3500, stopLoss: 3000, confidence: 65, timeframe: "3d" },
+          ETH: { signal: "BUY", entryPrice: 3200, targetPrice: 3500, stopLoss: 3000, confidence: 65, timeframe: "3d" },
           SOL: { signal: "BUY", entryPrice: 95.5, targetPrice: 110, stopLoss: 88, confidence: 78, timeframe: "5d" },
         };
 
         const mock = mockSignals[symbolUpper] || {
-          signal: "HOLD", entryPrice: 100, targetPrice: 110, stopLoss: 90, confidence: 50, timeframe: "1d"
+          signal: "BUY", entryPrice: 100, targetPrice: 110, stopLoss: 90, confidence: 50, timeframe: "1d"
         };
 
         return {

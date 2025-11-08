@@ -243,6 +243,20 @@ export class TokenMetricsService extends Service {
       console.log(`Symbols: ${symbols.join(", ")}`);
       console.log(`Mapped Token IDs: ${tokenIds.join(", ") || "none found"}`);
 
+      // Token Metrics API requires date range parameters
+      // Get last 30 days of data
+      const endDate = new Date();
+      const startDate = new Date();
+      startDate.setDate(endDate.getDate() - 30);
+
+      const dateParams = {
+        start_date: startDate.toISOString().split('T')[0], // YYYY-MM-DD format
+        end_date: endDate.toISOString().split('T')[0],
+      };
+
+      console.log(`===== DATE RANGE =====`);
+      console.log(`Start: ${dateParams.start_date}, End: ${dateParams.end_date}`);
+
       let response: TMTradingSignalResponse;
 
       // Try with token_id first if we have mappings
@@ -251,6 +265,7 @@ export class TokenMetricsService extends Service {
         try {
           response = await this.fetchAPI<TMTradingSignalResponse>("/trading-signals", {
             token_id: tokenIds.join(","),
+            ...dateParams,
           });
           console.log(`===== TOKEN_ID APPROACH SUCCEEDED =====`);
         } catch (error) {
@@ -259,12 +274,14 @@ export class TokenMetricsService extends Service {
           // Fallback to symbol parameter
           response = await this.fetchAPI<TMTradingSignalResponse>("/trading-signals", {
             symbol: symbols.join(","),
+            ...dateParams,
           });
         }
       } else {
         // No token IDs found, use symbol directly
         response = await this.fetchAPI<TMTradingSignalResponse>("/trading-signals", {
           symbol: symbols.join(","),
+          ...dateParams,
         });
       }
 
@@ -273,29 +290,51 @@ export class TokenMetricsService extends Service {
         return this.getMockTradingSignals(symbols);
       }
 
-      const results: TradingSignal[] = response.data
-        .filter(item => symbols.some(s =>
-          (item.TOKEN_SYMBOL || item.SYMBOL || "").toUpperCase() === s.toUpperCase()
-        ))
-        .map((item) => {
-          // Map TRADING_SIGNAL (1, -1, 0) to BUY/SELL/HOLD
-          const tradingSignal = item.TRADING_SIGNAL || 0;
-          const signal: "BUY" | "SELL" = tradingSignal > 0 ? "BUY" : "SELL";
+      console.log(`===== API RETURNED ${response.data.length} RECORDS =====`);
 
-          // Calculate confidence from trading signal strength (0-100 scale)
-          const confidence = Math.abs(tradingSignal) * 100;
+      // Group by symbol and get the most recent signal for each
+      const symbolMap = new Map<string, typeof response.data[0]>();
 
-          return {
-            symbol: (item.TOKEN_SYMBOL || item.SYMBOL || "").toUpperCase(),
-            signal: signal,
-            entryPrice: 0, // Not available in this endpoint
-            targetPrice: 0, // Not available in this endpoint
-            stopLoss: 0, // Not available in this endpoint
-            confidence: confidence,
-            timeframe: "1d",
-            reasoning: `Token Metrics ${signal} signal (grade: ${item.TM_TRADER_GRADE || "N/A"})`,
-          };
-        });
+      for (const item of response.data) {
+        const symbol = (item.TOKEN_SYMBOL || item.SYMBOL || "").toUpperCase();
+        if (!symbols.some(s => s.toUpperCase() === symbol)) continue;
+
+        const existing = symbolMap.get(symbol);
+        const itemDate = new Date(item.DATE || 0);
+        const existingDate = existing ? new Date(existing.DATE || 0) : new Date(0);
+
+        // Keep the most recent signal
+        if (itemDate >= existingDate) {
+          symbolMap.set(symbol, item);
+        }
+      }
+
+      const results: TradingSignal[] = Array.from(symbolMap.values()).map((item) => {
+        // Map TRADING_SIGNAL (1, -1, 0) to BUY/SELL
+        const tradingSignal = item.TRADING_SIGNAL || 0;
+        const signal: "BUY" | "SELL" = tradingSignal >= 0 ? "BUY" : "SELL";
+
+        // Use TM_TRADER_GRADE as confidence if available, otherwise use signal strength
+        const traderGrade = typeof item.TM_TRADER_GRADE === 'string'
+          ? parseFloat(item.TM_TRADER_GRADE)
+          : item.TM_TRADER_GRADE || 0;
+
+        const confidence = traderGrade > 0 ? traderGrade : Math.abs(tradingSignal) * 50;
+
+        console.log(`===== SIGNAL FOR ${item.TOKEN_SYMBOL} =====`);
+        console.log(`Trading Signal: ${tradingSignal}, Grade: ${traderGrade}, Confidence: ${confidence}`);
+
+        return {
+          symbol: (item.TOKEN_SYMBOL || item.SYMBOL || "").toUpperCase(),
+          signal: signal,
+          entryPrice: 0, // Not available in this endpoint
+          targetPrice: 0, // Not available in this endpoint
+          stopLoss: 0, // Not available in this endpoint
+          confidence: Math.round(confidence),
+          timeframe: "30d",
+          reasoning: `Token Metrics ${signal} signal (Trader Grade: ${traderGrade.toFixed(2)})`,
+        };
+      });
 
       if (results.length === 0) {
         logger.warn("[TokenMetrics] No signals found in API response, using mock data");

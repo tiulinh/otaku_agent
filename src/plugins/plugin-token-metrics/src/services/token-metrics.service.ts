@@ -201,25 +201,29 @@ export class TokenMetricsService extends Service {
       logger.info(`[TokenMetrics] Fetching trading signals for: ${symbols.join(", ")}`);
 
       // Call real Token Metrics API
+      // Based on official docs: https://developers.tokenmetrics.com/docs/trading-signals-guide
       interface TMTradingSignalResponse {
+        success?: boolean;
+        message?: string;
+        length?: number;
         data?: Array<{
-          token_symbol?: string;
-          signal?: string;
-          entry_price?: number;
-          target_price?: number;
-          stop_loss?: number;
-          confidence?: number;
-          timeframe?: string;
-          reasoning?: string;
-          // Alternative field names
-          symbol?: string;
-          type?: string;
-          price?: number;
+          TOKEN_ID?: number;
+          TOKEN_NAME?: string;
+          TOKEN_SYMBOL?: string;
+          SYMBOL?: string;
+          DATE?: string;
+          TRADING_SIGNAL?: number; // bullish (1), bearish (-1), or no signal (0)
+          TOKEN_TREND?: string;
+          TRADING_SIGNALS_RETURNS?: number;
+          HOLDING_RETURNS?: number;
+          TM_LINK?: string;
+          TM_TRADER_GRADE?: string;
+          TM_INVESTOR_GRADE?: string;
         }>;
       }
 
       const response = await this.fetchAPI<TMTradingSignalResponse>("/trading-signals", {
-        symbols: symbols.join(","),
+        symbol: symbols.join(","),
       });
 
       if (!response.data || !Array.isArray(response.data)) {
@@ -229,18 +233,27 @@ export class TokenMetricsService extends Service {
 
       const results: TradingSignal[] = response.data
         .filter(item => symbols.some(s =>
-          (item.token_symbol || item.symbol || "").toUpperCase() === s.toUpperCase()
+          (item.TOKEN_SYMBOL || item.SYMBOL || "").toUpperCase() === s.toUpperCase()
         ))
-        .map((item) => ({
-          symbol: (item.token_symbol || item.symbol || "").toUpperCase(),
-          signal: (item.signal || item.type || "BUY").toUpperCase() as "BUY" | "SELL",
-          entryPrice: item.entry_price || item.price || 0,
-          targetPrice: item.target_price || 0,
-          stopLoss: item.stop_loss || 0,
-          confidence: item.confidence || 50,
-          timeframe: item.timeframe || "1d",
-          reasoning: item.reasoning || `AI analysis for ${item.token_symbol || item.symbol}`,
-        }));
+        .map((item) => {
+          // Map TRADING_SIGNAL (1, -1, 0) to BUY/SELL/HOLD
+          const tradingSignal = item.TRADING_SIGNAL || 0;
+          const signal: "BUY" | "SELL" = tradingSignal > 0 ? "BUY" : "SELL";
+
+          // Calculate confidence from trading signal strength (0-100 scale)
+          const confidence = Math.abs(tradingSignal) * 100;
+
+          return {
+            symbol: (item.TOKEN_SYMBOL || item.SYMBOL || "").toUpperCase(),
+            signal: signal,
+            entryPrice: 0, // Not available in this endpoint
+            targetPrice: 0, // Not available in this endpoint
+            stopLoss: 0, // Not available in this endpoint
+            confidence: confidence,
+            timeframe: "1d",
+            reasoning: `Token Metrics ${signal} signal (grade: ${item.TM_TRADER_GRADE || "N/A"})`,
+          };
+        });
 
       if (results.length === 0) {
         logger.warn("[TokenMetrics] No signals found in API response, using mock data");

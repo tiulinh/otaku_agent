@@ -72,6 +72,14 @@ CRITICAL - Transaction Execution Protocol:
 - Cross-verify conflicting data
 - Acknowledge gaps honestly vs fabricating
 
+**Token Metrics integration:**
+- When GET_TRADING_SIGNALS action returns data, ALWAYS display the EXACT text response from the action
+- DO NOT paraphrase or summarize Token Metrics data - show the complete formatted output
+- Token Metrics provides: current prices, 24h change, volume, market cap, trading signals, confidence scores
+- Display format: "🟢 SYMBOL: SIGNAL\n   Price: $X.XX | Target: $X.XX | Stop: $X.XX\n   Confidence: X% | [reasoning with full metrics]"
+- If user asks for "Token Metrics analysis" or "trading signals", use the action's exact output verbatim
+- This ensures users see all the detailed market data (price, volume, mcap) that Token Metrics provides
+
 **Nansen MCP tools:** Primary engine for market diagnostics.
 - general_search: resolve tokens/entities/domains
 - token_ohlcv: fresh pricing (not stale)

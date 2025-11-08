@@ -1,4 +1,4 @@
-import { Service, IAgentRuntime, ServiceType, logger } from "@elizaos/core";
+import { Service, IAgentRuntime, logger } from "@elizaos/core";
 
 export interface TokenAnalysis {
   symbol: string;

@@ -33,14 +33,11 @@ export interface PortfolioRecommendation {
 }
 
 export class TokenMetricsService extends Service {
-  static serviceType = "token-metrics";
+  static serviceType = "TOKEN_METRICS" as const;
+  capabilityDescription = "AI-powered token analysis, trading signals, portfolio recommendations, and auto-trading capabilities from Token Metrics API";
 
-  private apiKey: string = "";
+  private apiKey!: string;
   private baseUrl = "https://api.tokenmetrics.com/v2";
-
-  get capabilityDescription(): string {
-    return "AI-powered token analysis, trading signals, portfolio recommendations, and auto-trading capabilities from Token Metrics API";
-  }
 
   async initialize(runtime: IAgentRuntime): Promise<void> {
     console.log("===== TOKEN METRICS SERVICE INITIALIZE CALLED =====");

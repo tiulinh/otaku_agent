@@ -44,48 +44,23 @@ export class TokenMetricsService extends Service {
   }
 
   static async start(runtime: IAgentRuntime): Promise<TokenMetricsService> {
-    console.log("===== TOKEN METRICS SERVICE START METHOD CALLED (v3) =====");
-    logger.info("[TokenMetrics] Static start() method invoked");
+    console.log("===== TOKEN METRICS SERVICE START CALLED (v4) =====");
+    logger.info("[TokenMetrics] Starting TokenMetrics service");
 
-    try {
-      console.log("[TokenMetrics] Creating TokenMetricsService instance...");
-      const service = new TokenMetricsService(runtime);
-      console.log("[TokenMetrics] Instance created, calling initialize...");
+    const service = new TokenMetricsService(runtime);
 
-      await service.initialize(runtime);
+    // Initialize API key directly in start() like CdpService
+    service.apiKey = runtime.getSetting("TOKENMETRICS_API_KEY") || "";
 
-      console.log("[TokenMetrics] Initialize completed, returning service");
-      return service;
-    } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : String(error);
-      console.error(`[TokenMetrics] FATAL ERROR in start(): ${errorMsg}`);
-      logger.error(`[TokenMetrics] Failed to start service: ${errorMsg}`);
-      throw error;
+    if (!service.apiKey) {
+      console.log("[TokenMetrics] WARNING: API key not configured");
+      logger.warn("[TokenMetrics] API key not configured");
+    } else {
+      console.log(`[TokenMetrics] Service started with API key: ${service.apiKey.substring(0, 10)}...`);
+      logger.info("[TokenMetrics] Service started successfully");
     }
-  }
 
-  async initialize(runtime: IAgentRuntime): Promise<void> {
-    console.log("===== TOKEN METRICS SERVICE INITIALIZE CALLED (v3) =====");
-    console.log(`[TokenMetrics] Service type: ${TokenMetricsService.serviceType}`);
-    console.log(`[TokenMetrics] Runtime provided: ${!!runtime}`);
-
-    try {
-      this.apiKey = runtime.getSetting("TOKENMETRICS_API_KEY") || "";
-      console.log(`[TokenMetrics] API key retrieved: ${this.apiKey ? 'YES' : 'NO'}`);
-
-      if (!this.apiKey) {
-        console.log("[TokenMetrics] WARNING: API key not configured");
-        logger.warn("[TokenMetrics] API key not configured");
-      } else {
-        console.log(`[TokenMetrics] Service initialized successfully with API key: ${this.apiKey.substring(0, 10)}...`);
-        logger.info("[TokenMetrics] Service initialized");
-      }
-    } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : String(error);
-      console.error(`[TokenMetrics] ERROR during initialize: ${errorMsg}`);
-      logger.error(`[TokenMetrics] Initialize error: ${errorMsg}`);
-      throw error;
-    }
+    return service;
   }
 
   async stop(): Promise<void> {

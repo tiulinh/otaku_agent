@@ -76,43 +76,41 @@ export class TokenMetricsService extends Service {
 
     console.log("===== CALLING TOKEN METRICS API =====");
     console.log(`URL: ${url.toString()}`);
+    console.log(`API Key: ${this.apiKey.substring(0, 10)}...`);
     logger.info(`[TokenMetrics] Calling API: ${url.toString()}`);
 
-    // Try different authentication methods common in APIs
-    const authConfigs: Array<{ name: string; headers: Record<string, string> }> = [
-      { name: "api-key", headers: { "api-key": this.apiKey, "Content-Type": "application/json" } },
-      { name: "x-api-key", headers: { "x-api-key": this.apiKey, "Content-Type": "application/json" } },
-      { name: "Authorization", headers: { "Authorization": `Bearer ${this.apiKey}`, "Content-Type": "application/json" } },
-    ];
+    // Token Metrics API uses x-api-key header (official documentation)
+    const headers = {
+      "x-api-key": this.apiKey,
+      "Content-Type": "application/json",
+    };
 
-    let lastError: Error | null = null;
+    try {
+      const response = await fetch(url.toString(), { headers });
 
-    for (const config of authConfigs) {
-      try {
-        const response = await fetch(url.toString(), {
-          headers: config.headers,
-        });
+      console.log(`===== API RESPONSE STATUS: ${response.status} =====`);
 
-        if (response.ok) {
-          const data = await response.json();
-          console.log(`===== API SUCCESS with ${config.name} =====`);
-          console.log(`Response data:`, JSON.stringify(data).substring(0, 500));
-          logger.info(`[TokenMetrics] API call successful with header: ${config.name}`);
-          return data as T;
-        }
-
+      if (!response.ok) {
         const errorText = await response.text();
-        console.log(`===== API FAILED with ${config.name}: ${response.status} =====`);
-        console.log(`Error:`, errorText.substring(0, 200));
-        logger.warn(`[TokenMetrics] Auth failed with ${config.name}: ${response.status} - ${errorText}`);
-        lastError = new Error(`${response.status}: ${errorText}`);
-      } catch (error) {
-        logger.warn(`[TokenMetrics] Request failed with ${config.name}:`, String(error));
-        lastError = error instanceof Error ? error : new Error(String(error));
+        console.log(`===== API ERROR RESPONSE =====`);
+        console.log(`Status: ${response.status}`);
+        console.log(`Error: ${errorText}`);
+        logger.error(`[TokenMetrics] API error ${response.status}: ${errorText}`);
+        throw new Error(`Token Metrics API error ${response.status}: ${errorText}`);
       }
-    }
 
-    throw new Error(`TokenMetrics API error after trying all auth methods: ${lastError?.message}`);
+      const data = await response.json();
+      console.log(`===== API SUCCESS =====`);
+      console.log(`Response data:`, JSON.stringify(data).substring(0, 500));
+      logger.info(`[TokenMetrics] API call successful`);
+      return data as T;
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      console.log(`===== API REQUEST FAILED =====`);
+      console.log(`Error: ${msg}`);
+      logger.error(`[TokenMetrics] Request failed: ${msg}`);
+      throw error;
+    }
   }
 
   /**

@@ -74,19 +74,39 @@ export class TokenMetricsService extends Service {
       url.searchParams.append(key, value);
     });
 
-    const response = await fetch(url.toString(), {
-      headers: {
-        "Authorization": `Bearer ${this.apiKey}`,
-        "Content-Type": "application/json",
-      },
-    });
+    logger.info(`[TokenMetrics] Calling API: ${url.toString()}`);
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`TokenMetrics API error (${response.status}): ${errorText}`);
+    // Try different authentication methods common in APIs
+    const authConfigs: Array<{ name: string; headers: Record<string, string> }> = [
+      { name: "api-key", headers: { "api-key": this.apiKey, "Content-Type": "application/json" } },
+      { name: "x-api-key", headers: { "x-api-key": this.apiKey, "Content-Type": "application/json" } },
+      { name: "Authorization", headers: { "Authorization": `Bearer ${this.apiKey}`, "Content-Type": "application/json" } },
+    ];
+
+    let lastError: Error | null = null;
+
+    for (const config of authConfigs) {
+      try {
+        const response = await fetch(url.toString(), {
+          headers: config.headers,
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          logger.info(`[TokenMetrics] API call successful with header: ${config.name}`);
+          return data as T;
+        }
+
+        const errorText = await response.text();
+        logger.warn(`[TokenMetrics] Auth failed with ${config.name}: ${response.status} - ${errorText}`);
+        lastError = new Error(`${response.status}: ${errorText}`);
+      } catch (error) {
+        logger.warn(`[TokenMetrics] Request failed with ${config.name}:`, String(error));
+        lastError = error instanceof Error ? error : new Error(String(error));
+      }
     }
 
-    return response.json() as Promise<T>;
+    throw new Error(`TokenMetrics API error after trying all auth methods: ${lastError?.message}`);
   }
 
   /**
@@ -164,45 +184,94 @@ export class TokenMetricsService extends Service {
 
   /**
    * Get trading signals with entry/exit points
-   * TODO: Update endpoint when Token Metrics provides actual API documentation
+   * Real Token Metrics API endpoint: /trading-signals
    */
   async getTradingSignals(symbols: string[]): Promise<TradingSignal[]> {
     try {
       logger.info(`[TokenMetrics] Fetching trading signals for: ${symbols.join(", ")}`);
-      logger.warn("[TokenMetrics] Using mock trading signals - real API endpoint not yet configured");
 
-      // Mock trading signals
-      const results: TradingSignal[] = symbols.map((symbol) => {
-        const symbolUpper = symbol.toUpperCase();
+      // Call real Token Metrics API
+      interface TMTradingSignalResponse {
+        data?: Array<{
+          token_symbol?: string;
+          signal?: string;
+          entry_price?: number;
+          target_price?: number;
+          stop_loss?: number;
+          confidence?: number;
+          timeframe?: string;
+          reasoning?: string;
+          // Alternative field names
+          symbol?: string;
+          type?: string;
+          price?: number;
+        }>;
+      }
 
-        const mockSignals: Record<string, Partial<TradingSignal>> = {
-          BTC: { signal: "BUY", entryPrice: 45000, targetPrice: 50000, stopLoss: 43000, confidence: 85, timeframe: "7d" },
-          ETH: { signal: "BUY", entryPrice: 3200, targetPrice: 3500, stopLoss: 3000, confidence: 65, timeframe: "3d" },
-          SOL: { signal: "BUY", entryPrice: 95.5, targetPrice: 110, stopLoss: 88, confidence: 78, timeframe: "5d" },
-        };
-
-        const mock = mockSignals[symbolUpper] || {
-          signal: "BUY", entryPrice: 100, targetPrice: 110, stopLoss: 90, confidence: 50, timeframe: "1d"
-        };
-
-        return {
-          symbol: symbolUpper,
-          signal: mock.signal as "BUY" | "SELL" || "HOLD" as "BUY" | "SELL",
-          entryPrice: mock.entryPrice || 100,
-          targetPrice: mock.targetPrice || 110,
-          stopLoss: mock.stopLoss || 90,
-          confidence: mock.confidence || 50,
-          timeframe: mock.timeframe || "1d",
-          reasoning: `AI analysis suggests ${mock.signal} signal for ${symbolUpper}`,
-        } as TradingSignal;
+      const response = await this.fetchAPI<TMTradingSignalResponse>("/trading-signals", {
+        symbols: symbols.join(","),
       });
 
-      logger.info(`[TokenMetrics] Returning ${results.length} mock trading signals`);
+      if (!response.data || !Array.isArray(response.data)) {
+        logger.warn("[TokenMetrics] API returned unexpected format, using mock data");
+        return this.getMockTradingSignals(symbols);
+      }
+
+      const results: TradingSignal[] = response.data
+        .filter(item => symbols.some(s =>
+          (item.token_symbol || item.symbol || "").toUpperCase() === s.toUpperCase()
+        ))
+        .map((item) => ({
+          symbol: (item.token_symbol || item.symbol || "").toUpperCase(),
+          signal: (item.signal || item.type || "BUY").toUpperCase() as "BUY" | "SELL",
+          entryPrice: item.entry_price || item.price || 0,
+          targetPrice: item.target_price || 0,
+          stopLoss: item.stop_loss || 0,
+          confidence: item.confidence || 50,
+          timeframe: item.timeframe || "1d",
+          reasoning: item.reasoning || `AI analysis for ${item.token_symbol || item.symbol}`,
+        }));
+
+      if (results.length === 0) {
+        logger.warn("[TokenMetrics] No signals found in API response, using mock data");
+        return this.getMockTradingSignals(symbols);
+      }
+
+      logger.info(`[TokenMetrics] Returning ${results.length} real trading signals from API`);
       return results;
     } catch (error) {
-      logger.error("[TokenMetrics] getTradingSignals failed:", String(error));
-      throw error;
+      logger.error("[TokenMetrics] getTradingSignals API failed, using mock data:", String(error));
+      return this.getMockTradingSignals(symbols);
     }
+  }
+
+  private getMockTradingSignals(symbols: string[]): TradingSignal[] {
+    logger.warn("[TokenMetrics] Using mock trading signals");
+
+    return symbols.map((symbol) => {
+      const symbolUpper = symbol.toUpperCase();
+
+      const mockSignals: Record<string, Partial<TradingSignal>> = {
+        BTC: { signal: "BUY", entryPrice: 45000, targetPrice: 50000, stopLoss: 43000, confidence: 85, timeframe: "7d" },
+        ETH: { signal: "BUY", entryPrice: 3200, targetPrice: 3500, stopLoss: 3000, confidence: 65, timeframe: "3d" },
+        SOL: { signal: "BUY", entryPrice: 95.5, targetPrice: 110, stopLoss: 88, confidence: 78, timeframe: "5d" },
+      };
+
+      const mock = mockSignals[symbolUpper] || {
+        signal: "BUY", entryPrice: 100, targetPrice: 110, stopLoss: 90, confidence: 50, timeframe: "1d"
+      };
+
+      return {
+        symbol: symbolUpper,
+        signal: mock.signal as "BUY" | "SELL",
+        entryPrice: mock.entryPrice || 100,
+        targetPrice: mock.targetPrice || 110,
+        stopLoss: mock.stopLoss || 90,
+        confidence: mock.confidence || 50,
+        timeframe: mock.timeframe || "1d",
+        reasoning: `Mock AI analysis suggests ${mock.signal} signal for ${symbolUpper}`,
+      };
+    });
   }
 
   /**

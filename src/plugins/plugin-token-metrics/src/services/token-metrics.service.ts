@@ -75,15 +75,50 @@ export class TokenMetricsService extends Service {
 
   /**
    * Get AI-powered token analysis and ratings
+   * TODO: Update endpoint when Token Metrics provides actual API documentation
    */
   async getTokenAnalysis(symbols: string[]): Promise<TokenAnalysis[]> {
     try {
       logger.info(`[TokenMetrics] Fetching analysis for: ${symbols.join(", ")}`);
 
+      // TEMPORARY: Return mock data until we have real Token Metrics API endpoint
+      // The actual endpoint should be determined from Token Metrics API docs
+      logger.warn("[TokenMetrics] Using mock data - real API endpoint not yet configured");
+
+      const results: TokenAnalysis[] = symbols.map((symbol) => {
+        const symbolUpper = symbol.toUpperCase();
+
+        // Mock data based on symbol
+        const mockData: Record<string, Partial<TokenAnalysis>> = {
+          BTC: { rating: 85, riskScore: 35, aiScore: 88, sentiment: "BULLISH", recommendation: "BUY" },
+          ETH: { rating: 78, riskScore: 42, aiScore: 80, sentiment: "NEUTRAL", recommendation: "HOLD" },
+          SOL: { rating: 82, riskScore: 38, aiScore: 85, sentiment: "BULLISH", recommendation: "BUY" },
+        };
+
+        const mock = mockData[symbolUpper] || {
+          rating: 65, riskScore: 50, aiScore: 65, sentiment: "NEUTRAL", recommendation: "HOLD"
+        };
+
+        return {
+          symbol: symbolUpper,
+          rating: mock.rating || 65,
+          riskScore: mock.riskScore || 50,
+          aiScore: mock.aiScore || 65,
+          marketCap: 0,
+          volume24h: 0,
+          sentiment: mock.sentiment || "NEUTRAL",
+          recommendation: mock.recommendation || "HOLD",
+        } as TokenAnalysis;
+      });
+
+      logger.info(`[TokenMetrics] Returning ${results.length} mock analyses`);
+      return results;
+
+      /* REAL API CALL (commented out until endpoint is known):
       const results = await Promise.all(
         symbols.map(async (symbol) => {
           try {
-            const data = await this.fetchAPI<any>("/token-metrics", {
+            const data = await this.fetchAPI<any>("/api/v1/token-analysis", {
               symbol: symbol.toUpperCase(),
             });
 
@@ -103,8 +138,8 @@ export class TokenMetricsService extends Service {
           }
         })
       );
-
       return results;
+      */
     } catch (error) {
       logger.error("[TokenMetrics] getTokenAnalysis failed:", error);
       throw error;
@@ -113,55 +148,95 @@ export class TokenMetricsService extends Service {
 
   /**
    * Get trading signals with entry/exit points
+   * TODO: Update endpoint when Token Metrics provides actual API documentation
    */
   async getTradingSignals(symbols: string[]): Promise<TradingSignal[]> {
     try {
       logger.info(`[TokenMetrics] Fetching trading signals for: ${symbols.join(", ")}`);
+      logger.warn("[TokenMetrics] Using mock trading signals - real API endpoint not yet configured");
 
-      const results = await Promise.all(
-        symbols.map(async (symbol) => {
-          const data = await this.fetchAPI<any>("/trading-signals", {
-            symbol: symbol.toUpperCase(),
-          });
+      // Mock trading signals
+      const results: TradingSignal[] = symbols.map((symbol) => {
+        const symbolUpper = symbol.toUpperCase();
 
-          return {
-            symbol: symbol.toUpperCase(),
-            signal: data.signal || "HOLD",
-            entryPrice: data.entry_price || 0,
-            targetPrice: data.target_price || 0,
-            stopLoss: data.stop_loss || 0,
-            confidence: data.confidence || 50,
-            timeframe: data.timeframe || "1d",
-            reasoning: data.reasoning || "No signal available",
-          } as TradingSignal;
-        })
-      );
+        const mockSignals: Record<string, Partial<TradingSignal>> = {
+          BTC: { signal: "BUY", entryPrice: 45000, targetPrice: 50000, stopLoss: 43000, confidence: 85, timeframe: "7d" },
+          ETH: { signal: "HOLD", entryPrice: 3200, targetPrice: 3500, stopLoss: 3000, confidence: 65, timeframe: "3d" },
+          SOL: { signal: "BUY", entryPrice: 95.5, targetPrice: 110, stopLoss: 88, confidence: 78, timeframe: "5d" },
+        };
 
+        const mock = mockSignals[symbolUpper] || {
+          signal: "HOLD", entryPrice: 100, targetPrice: 110, stopLoss: 90, confidence: 50, timeframe: "1d"
+        };
+
+        return {
+          symbol: symbolUpper,
+          signal: mock.signal as "BUY" | "SELL" || "HOLD" as "BUY" | "SELL",
+          entryPrice: mock.entryPrice || 100,
+          targetPrice: mock.targetPrice || 110,
+          stopLoss: mock.stopLoss || 90,
+          confidence: mock.confidence || 50,
+          timeframe: mock.timeframe || "1d",
+          reasoning: `AI analysis suggests ${mock.signal} signal for ${symbolUpper}`,
+        } as TradingSignal;
+      });
+
+      logger.info(`[TokenMetrics] Returning ${results.length} mock trading signals`);
       return results;
     } catch (error) {
-      logger.error("[TokenMetrics] getTradingSignals failed:", error);
+      logger.error("[TokenMetrics] getTradingSignals failed:", String(error));
       throw error;
     }
   }
 
   /**
    * Get AI-recommended portfolio allocations
+   * TODO: Update endpoint when Token Metrics provides actual API documentation
    */
   async getPortfolioRecommendations(riskTolerance: "LOW" | "MEDIUM" | "HIGH" = "MEDIUM"): Promise<PortfolioRecommendation> {
     try {
       logger.info(`[TokenMetrics] Fetching portfolio recommendations (risk: ${riskTolerance})`);
+      logger.warn("[TokenMetrics] Using mock portfolio recommendations - real API endpoint not yet configured");
 
-      const data = await this.fetchAPI<any>("/portfolio-recommendations", {
-        risk_tolerance: riskTolerance,
-      });
-
-      return {
-        allocations: data.allocations || [],
-        totalScore: data.total_score || 0,
-        riskLevel: data.risk_level || "MEDIUM",
+      // Mock portfolio recommendations based on risk tolerance
+      const mockPortfolios: Record<string, PortfolioRecommendation> = {
+        LOW: {
+          allocations: [
+            { symbol: "BTC", percentage: 50, reasoning: "Safe haven asset with strong fundamentals" },
+            { symbol: "ETH", percentage: 30, reasoning: "Established smart contract platform" },
+            { symbol: "USDC", percentage: 20, reasoning: "Stable value preservation" },
+          ],
+          totalScore: 75,
+          riskLevel: "LOW",
+        },
+        MEDIUM: {
+          allocations: [
+            { symbol: "BTC", percentage: 40, reasoning: "Core portfolio foundation" },
+            { symbol: "ETH", percentage: 30, reasoning: "DeFi ecosystem leader" },
+            { symbol: "SOL", percentage: 15, reasoning: "High-performance blockchain" },
+            { symbol: "USDC", percentage: 15, reasoning: "Risk management buffer" },
+          ],
+          totalScore: 80,
+          riskLevel: "MEDIUM",
+        },
+        HIGH: {
+          allocations: [
+            { symbol: "BTC", percentage: 30, reasoning: "Portfolio anchor" },
+            { symbol: "ETH", percentage: 25, reasoning: "Smart contract leader" },
+            { symbol: "SOL", percentage: 20, reasoning: "Emerging ecosystem" },
+            { symbol: "MATIC", percentage: 15, reasoning: "Scaling solution" },
+            { symbol: "AVAX", percentage: 10, reasoning: "Growth potential" },
+          ],
+          totalScore: 70,
+          riskLevel: "HIGH",
+        },
       };
+
+      const portfolio = mockPortfolios[riskTolerance];
+      logger.info(`[TokenMetrics] Returning mock ${riskTolerance} risk portfolio`);
+      return portfolio;
     } catch (error) {
-      logger.error("[TokenMetrics] getPortfolioRecommendations failed:", error);
+      logger.error("[TokenMetrics] getPortfolioRecommendations failed:", String(error));
       throw error;
     }
   }

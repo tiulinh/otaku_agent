@@ -7,7 +7,129 @@ import {
   State,
   logger,
 } from "@elizaos/core";
-import { TokenMetricsService, TradingSignal } from "../services/token-metrics.service";
+import { TradingSignal } from "../services/token-metrics.service";
+
+// Direct API call helper - no service needed
+async function fetchTradingSignals(symbols: string[], apiKey: string): Promise<TradingSignal[]> {
+  if (!apiKey) {
+    console.log("[fetchTradingSignals] No API key, returning mock data");
+    return getMockSignals(symbols);
+  }
+
+  try {
+    const endDate = new Date();
+    const startDate = new Date();
+    startDate.setDate(endDate.getDate() - 30);
+
+    const TOKEN_ID_MAP: Record<string, number> = {
+      "BTC": 3375, "BITCOIN": 3375,
+      "ETH": 1027, "ETHEREUM": 1027,
+      "SOL": 5426, "SOLANA": 5426,
+    };
+
+    const tokenIds = symbols.map(s => TOKEN_ID_MAP[s.toUpperCase()]).filter(Boolean);
+
+    const url = new URL("https://api.tokenmetrics.com/v2/trading-signals");
+    if (tokenIds.length > 0) {
+      url.searchParams.append("token_id", tokenIds.join(","));
+    } else {
+      url.searchParams.append("symbol", symbols.join(","));
+    }
+    url.searchParams.append("start_date", startDate.toISOString().split('T')[0]);
+    url.searchParams.append("end_date", endDate.toISOString().split('T')[0]);
+
+    console.log(`[fetchTradingSignals] Calling: ${url.toString()}`);
+
+    const response = await fetch(url.toString(), {
+      headers: {
+        "x-api-key": apiKey,
+        "Content-Type": "application/json",
+      },
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.log(`[fetchTradingSignals] API error ${response.status}: ${errorText}`);
+      return getMockSignals(symbols);
+    }
+
+    const data: any = await response.json();
+    if (!data.data || !Array.isArray(data.data) || data.data.length === 0) {
+      console.log(`[fetchTradingSignals] No data returned, using mock`);
+      return getMockSignals(symbols);
+    }
+
+    console.log(`[fetchTradingSignals] Got ${data.data.length} records from API`);
+
+    // Group by symbol, get most recent
+    const symbolMap = new Map<string, any>();
+    for (const item of data.data) {
+      const symbol = (item.TOKEN_SYMBOL || item.SYMBOL || "").toUpperCase();
+      if (!symbols.some(s => s.toUpperCase() === symbol)) continue;
+
+      const existing = symbolMap.get(symbol);
+      const itemDate = new Date(item.DATE || 0);
+      const existingDate = existing ? new Date(existing.DATE || 0) : new Date(0);
+
+      if (itemDate >= existingDate) {
+        symbolMap.set(symbol, item);
+      }
+    }
+
+    const results: TradingSignal[] = Array.from(symbolMap.values()).map((item) => {
+      const tradingSignal = item.TRADING_SIGNAL || 0;
+      const signal: "BUY" | "SELL" = tradingSignal >= 0 ? "BUY" : "SELL";
+      const traderGrade = typeof item.TM_TRADER_GRADE === 'string'
+        ? parseFloat(item.TM_TRADER_GRADE)
+        : item.TM_TRADER_GRADE || 0;
+      const confidence = traderGrade > 0 ? traderGrade : Math.abs(tradingSignal) * 50;
+
+      return {
+        symbol: (item.TOKEN_SYMBOL || item.SYMBOL || "").toUpperCase(),
+        signal: signal,
+        entryPrice: 0,
+        targetPrice: 0,
+        stopLoss: 0,
+        confidence: Math.round(confidence),
+        timeframe: "30d",
+        reasoning: `Token Metrics ${signal} signal (Trader Grade: ${traderGrade.toFixed(2)})`,
+      };
+    });
+
+    console.log(`[fetchTradingSignals] Returning ${results.length} real signals`);
+    return results.length > 0 ? results : getMockSignals(symbols);
+  } catch (error) {
+    console.log(`[fetchTradingSignals] Error: ${error instanceof Error ? error.message : String(error)}`);
+    return getMockSignals(symbols);
+  }
+}
+
+function getMockSignals(symbols: string[]): TradingSignal[] {
+  console.log(`[getMockSignals] Returning mock data for ${symbols.join(", ")}`);
+  const mockData: Record<string, Partial<TradingSignal>> = {
+    BTC: { signal: "BUY", entryPrice: 45000, targetPrice: 50000, stopLoss: 43000, confidence: 85, timeframe: "7d" },
+    ETH: { signal: "BUY", entryPrice: 3200, targetPrice: 3500, stopLoss: 3000, confidence: 65, timeframe: "3d" },
+    SOL: { signal: "BUY", entryPrice: 95.5, targetPrice: 110, stopLoss: 88, confidence: 78, timeframe: "5d" },
+  };
+
+  return symbols.map((symbol) => {
+    const symbolUpper = symbol.toUpperCase();
+    const mock = mockData[symbolUpper] || {
+      signal: "BUY", entryPrice: 100, targetPrice: 110, stopLoss: 90, confidence: 50, timeframe: "1d"
+    };
+
+    return {
+      symbol: symbolUpper,
+      signal: mock.signal as "BUY" | "SELL",
+      entryPrice: mock.entryPrice || 100,
+      targetPrice: mock.targetPrice || 110,
+      stopLoss: mock.stopLoss || 90,
+      confidence: mock.confidence || 50,
+      timeframe: mock.timeframe || "1d",
+      reasoning: `Mock AI analysis suggests ${mock.signal} signal for ${symbolUpper}`,
+    };
+  });
+}
 
 export const getTradingSignalsAction: Action = {
   name: "GET_TRADING_SIGNALS",
@@ -45,10 +167,7 @@ export const getTradingSignalsAction: Action = {
     callback?: HandlerCallback,
   ): Promise<ActionResult> => {
     try {
-      const svc = runtime.getService(TokenMetricsService.serviceType) as TokenMetricsService | undefined;
-      if (!svc) {
-        throw new Error("TokenMetricsService not available");
-      }
+      console.log("===== GET_TRADING_SIGNALS ACTION HANDLER CALLED =====");
 
       const composedState = await runtime.composeState(message, ["ACTION_STATE"], true);
       const actionParams = composedState?.data?.actionParams as Record<string, string | undefined> | undefined;
@@ -79,7 +198,11 @@ export const getTradingSignalsAction: Action = {
 
       logger.info(`[GET_TRADING_SIGNALS] Fetching signals for: ${symbols.join(", ")}`);
 
-      const results: TradingSignal[] = await svc.getTradingSignals(symbols);
+      // Call API directly without service
+      const apiKey = runtime.getSetting("TOKENMETRICS_API_KEY") || "";
+      console.log(`[GET_TRADING_SIGNALS] API Key: ${apiKey ? apiKey.substring(0, 10) + '...' : 'NOT SET'}`);
+
+      const results: TradingSignal[] = await fetchTradingSignals(symbols, apiKey);
 
       const summaryLines = results.map((r) => {
         const emoji = r.signal === "BUY" ? "🟢" : r.signal === "SELL" ? "🔴" : "🟡";

@@ -34,13 +34,10 @@ export const getTokenAnalysisAction: Action = {
     },
   },
 
-  validate: async (runtime: IAgentRuntime): Promise<boolean> => {
-    const svc = runtime.getService(TokenMetricsService.serviceType) as TokenMetricsService | undefined;
-    if (!svc) {
-      logger.error("TokenMetricsService not available");
-      return false;
-    }
-    return true;
+  // Remove strict validation to allow ElizaOS AI to select this action based on description/similes
+  // Service availability will be checked in handler instead
+  validate: async (_runtime: IAgentRuntime): Promise<boolean> => {
+    return true; // Always available for selection
   },
 
   handler: async (

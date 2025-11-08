@@ -37,6 +37,7 @@ export const getTokenAnalysisAction: Action = {
   // Remove strict validation to allow ElizaOS AI to select this action based on description/similes
   // Service availability will be checked in handler instead
   validate: async (_runtime: IAgentRuntime): Promise<boolean> => {
+    console.log("===== TOKEN METRICS VALIDATE CALLED =====");
     return true; // Always available for selection
   },
 

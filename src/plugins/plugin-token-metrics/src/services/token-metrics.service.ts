@@ -194,6 +194,20 @@ export class TokenMetricsService extends Service {
    * Get trading signals with entry/exit points
    * Real Token Metrics API endpoint: /trading-signals
    */
+  // Known token ID mappings from Token Metrics API
+  private readonly TOKEN_ID_MAP: Record<string, number> = {
+    "BTC": 3375,
+    "BITCOIN": 3375,
+    "ETH": 1027,
+    "ETHEREUM": 1027,
+    "SOL": 5426,
+    "SOLANA": 5426,
+    "MATIC": 3890,
+    "POLYGON": 3890,
+    "AVAX": 5805,
+    "AVALANCHE": 5805,
+  };
+
   async getTradingSignals(symbols: string[]): Promise<TradingSignal[]> {
     try {
       console.log("===== TOKEN METRICS getTradingSignals CALLED =====");
@@ -222,9 +236,39 @@ export class TokenMetricsService extends Service {
         }>;
       }
 
-      const response = await this.fetchAPI<TMTradingSignalResponse>("/trading-signals", {
-        symbol: symbols.join(","),
-      });
+      // Try to get token IDs from mapping
+      const tokenIds = symbols
+        .map(s => this.TOKEN_ID_MAP[s.toUpperCase()])
+        .filter(id => id !== undefined);
+
+      console.log(`===== TOKEN ID MAPPING =====`);
+      console.log(`Symbols: ${symbols.join(", ")}`);
+      console.log(`Mapped Token IDs: ${tokenIds.join(", ") || "none found"}`);
+
+      let response: TMTradingSignalResponse;
+
+      // Try with token_id first if we have mappings
+      if (tokenIds.length > 0) {
+        console.log(`===== TRYING WITH TOKEN_ID PARAMETER =====`);
+        try {
+          response = await this.fetchAPI<TMTradingSignalResponse>("/trading-signals", {
+            token_id: tokenIds.join(","),
+          });
+          console.log(`===== TOKEN_ID APPROACH SUCCEEDED =====`);
+        } catch (error) {
+          console.log(`===== TOKEN_ID APPROACH FAILED, TRYING SYMBOL =====`);
+          console.log(`Error: ${error instanceof Error ? error.message : String(error)}`);
+          // Fallback to symbol parameter
+          response = await this.fetchAPI<TMTradingSignalResponse>("/trading-signals", {
+            symbol: symbols.join(","),
+          });
+        }
+      } else {
+        // No token IDs found, use symbol directly
+        response = await this.fetchAPI<TMTradingSignalResponse>("/trading-signals", {
+          symbol: symbols.join(","),
+        });
+      }
 
       if (!response.data || !Array.isArray(response.data)) {
         logger.warn("[TokenMetrics] API returned unexpected format, using mock data");

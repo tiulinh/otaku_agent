@@ -8,168 +8,79 @@ import {
   logger,
 } from "@elizaos/core";
 import { TradingSignal } from "../services/token-metrics.service";
+import { TokenMetricsClient } from "tmai-api";
 
-// Hybrid API call - uses real API for available tokens, mock for major coins on free tier
+// Token Metrics SDK integration - clean and simple
 async function fetchTradingSignals(symbols: string[], apiKey: string): Promise<TradingSignal[]> {
   if (!apiKey) {
-    console.log("[fetchTradingSignals] No API key, returning mock data for all symbols");
-    return getMockSignals(symbols, "No API key configured");
+    throw new Error("TOKENMETRICS_API_KEY not configured");
   }
-
-  const results: TradingSignal[] = [];
-  const majorCoins = ["BTC", "ETH", "SOL", "BNB", "ADA", "XRP", "DOGE", "MATIC", "POL"];
 
   try {
-    // Call /v2/trading-signals endpoint (FREE tier - Indices & Indicators only)
-    // Per pricing docs: Free tier does NOT include major coins
-    const url = "https://api.tokenmetrics.com/v2/trading-signals?limit=50&page=1";
+    // Initialize Token Metrics client
+    const client = new TokenMetricsClient(apiKey);
+    console.log(`[Token Metrics] Fetching data for: ${symbols.join(", ")}`);
 
-    console.log(`[fetchTradingSignals] Calling Token Metrics /v2/trading-signals`);
+    // Get token data (includes price, market cap, volume, etc.)
+    const tokensResult = await client.tokens.get({ symbol: symbols.join(",") });
 
-    const response = await fetch(url, {
-      headers: {
-        "accept": "application/json",
-        "x-api-key": apiKey,
-      },
+    if (!tokensResult.success || !tokensResult.data || tokensResult.data.length === 0) {
+      throw new Error("No data returned from Token Metrics API");
+    }
+
+    console.log(`[Token Metrics] ✅ Retrieved ${tokensResult.data.length} tokens`);
+
+    // Get price data for more accuracy
+    const priceResult = await client.price.get({ symbol: symbols.join(",") });
+    const priceMap = new Map();
+    if (priceResult.success && priceResult.data) {
+      priceResult.data.forEach((p: any) => {
+        priceMap.set(p.token_id, p.current_price);
+      });
+    }
+
+    // Generate signals from Token Metrics data
+    const signals: TradingSignal[] = tokensResult.data.map((token: any) => {
+      const currentPrice = priceMap.get(token.token_id) || token.current_price || 0;
+      const priceChange24h = token.price_change_percentage_24h_in_currency || 0;
+      const marketCap = token.market_cap || 0;
+      const volume24h = token.total_volume || 0;
+
+      // Generate signal based on price momentum
+      const signal: "BUY" | "SELL" = priceChange24h >= 0 ? "BUY" : "SELL";
+
+      // Calculate confidence from market data
+      const momentumScore = Math.min(40, Math.abs(priceChange24h) * 5);
+      const volumeScore = volume24h > 0 ? Math.min(20, Math.log10(volume24h / 1e6) * 2) : 0;
+      const capScore = marketCap > 0 ? Math.min(25, Math.log10(marketCap / 1e9) * 3) : 0;
+      const confidence = Math.round(Math.max(55, Math.min(95, 50 + momentumScore + volumeScore + capScore)));
+
+      // Calculate price targets
+      const volatility = Math.abs(priceChange24h) / 100;
+      const targetPrice = currentPrice * (signal === "BUY" ? 1 + volatility * 1.5 : 1 - volatility * 1.2);
+      const stopLoss = currentPrice * (signal === "BUY" ? 1 - volatility * 0.8 : 1 + volatility * 0.8);
+
+      console.log(`[Token Metrics] ${token.token_symbol}: ${signal} at $${currentPrice.toFixed(2)} (${priceChange24h >= 0 ? '+' : ''}${priceChange24h.toFixed(2)}%)`);
+
+      return {
+        symbol: token.token_symbol.toUpperCase(),
+        signal: signal,
+        entryPrice: currentPrice,
+        targetPrice: targetPrice,
+        stopLoss: stopLoss,
+        confidence: confidence,
+        timeframe: "24h",
+        reasoning: `Token Metrics: ${token.token_name} @ $${currentPrice >= 1 ? currentPrice.toFixed(2) : currentPrice.toFixed(6)} | 24h: ${priceChange24h >= 0 ? '+' : ''}${priceChange24h.toFixed(2)}% | Vol: $${(volume24h / 1e6).toFixed(1)}M | MCap: $${(marketCap / 1e9).toFixed(2)}B`,
+      };
     });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.log(`[fetchTradingSignals] API error ${response.status}: ${errorText}`);
-      return getMockSignals(symbols, `API error: ${response.status}`);
-    }
+    return signals;
 
-    const data: any = await response.json();
-    if (!data.success || !data.data || !Array.isArray(data.data) || data.data.length === 0) {
-      console.log(`[fetchTradingSignals] No data returned from API`);
-      return getMockSignals(symbols, "No data from API");
-    }
-
-    console.log(`[fetchTradingSignals] Got ${data.data.length} trading signals from Token Metrics FREE tier`);
-
-    // Process each requested symbol
-    for (const symbol of symbols) {
-      const symbolUpper = symbol.toUpperCase();
-
-      // Check if it's a major coin (not available in free tier)
-      if (majorCoins.includes(symbolUpper)) {
-        console.log(`[fetchTradingSignals] ${symbolUpper} is major coin - using enhanced mock data (FREE tier limitation)`);
-        const mockSignal = getMockSignals([symbolUpper], "FREE tier - major coins require Premium/VIP plan")[0];
-        results.push(mockSignal);
-        continue;
-      }
-
-      // Try to find in API response
-      const apiToken = data.data.find((t: any) =>
-        t.TOKEN_SYMBOL?.toUpperCase() === symbolUpper
-      );
-
-      if (apiToken) {
-        // Real data from Token Metrics API
-        const tradingSignal = apiToken.TRADING_SIGNAL; // 1 (bullish), -1 (bearish), 0 (no signal)
-        const traderGrade = apiToken.TM_TRADER_GRADE || 50;
-
-        const signal: "BUY" | "SELL" | "HOLD" =
-          tradingSignal === 1 ? "BUY" :
-          tradingSignal === -1 ? "SELL" : "HOLD";
-
-        // Use trader grade as confidence (0-100 scale)
-        const confidence = Math.round(Math.min(95, Math.max(50, traderGrade)));
-
-        results.push({
-          symbol: apiToken.TOKEN_SYMBOL.toUpperCase(),
-          signal: signal as "BUY" | "SELL",
-          entryPrice: 0, // Not available in free tier
-          targetPrice: 0,
-          stopLoss: 0,
-          confidence: confidence,
-          timeframe: "Current",
-          reasoning: `Token Metrics AI (Real Data): ${apiToken.TOKEN_NAME} has trader grade ${traderGrade.toFixed(1)}/100 with ${signal} signal. Date: ${new Date(apiToken.DATE).toLocaleDateString()}`,
-        });
-
-        console.log(`[fetchTradingSignals] ✅ REAL DATA for ${apiToken.TOKEN_SYMBOL}: Signal=${tradingSignal}, Grade=${traderGrade.toFixed(1)}`);
-      } else {
-        // Token not found in API response
-        console.log(`[fetchTradingSignals] ${symbolUpper} not found in free tier data - using mock`);
-        const mockSignal = getMockSignals([symbolUpper], "Token not in FREE tier dataset")[0];
-        results.push(mockSignal);
-      }
-    }
-
-    console.log(`[fetchTradingSignals] Returning ${results.length} signals (mix of real API + mock data)`);
-    return results;
   } catch (error) {
-    console.log(`[fetchTradingSignals] Error: ${error instanceof Error ? error.message : String(error)}`);
-    return getMockSignals(symbols, `Error: ${error instanceof Error ? error.message : 'Unknown'}`);
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    console.log(`[Token Metrics] ❌ Error: ${errorMsg}`);
+    throw new Error(`Token Metrics API error: ${errorMsg}`);
   }
-}
-
-function getMockSignals(symbols: string[], reason: string): TradingSignal[] {
-  console.log(`[getMockSignals] Returning mock data for ${symbols.join(", ")} - Reason: ${reason}`);
-
-  // Enhanced mock data with realistic market analysis patterns
-  const mockData: Record<string, Partial<TradingSignal>> = {
-    BTC: {
-      signal: "BUY",
-      entryPrice: 67500,
-      targetPrice: 75000,
-      stopLoss: 64000,
-      confidence: 82,
-      timeframe: "7-14d",
-      reasoning: "Token Metrics AI Analysis (Demo): Bitcoin showing strong institutional accumulation with bullish market structure. Upgrade to Premium for real-time signals."
-    },
-    ETH: {
-      signal: "BUY",
-      entryPrice: 3450,
-      targetPrice: 3850,
-      stopLoss: 3200,
-      confidence: 78,
-      timeframe: "5-10d",
-      reasoning: "Token Metrics AI Analysis (Demo): Ethereum momentum building ahead of network upgrades. Premium tier unlocks live trading signals."
-    },
-    SOL: {
-      signal: "BUY",
-      entryPrice: 145,
-      targetPrice: 165,
-      stopLoss: 135,
-      confidence: 75,
-      timeframe: "3-7d",
-      reasoning: "Token Metrics AI Analysis (Demo): Solana showing ecosystem growth with increasing DEX volumes. Real-time data requires Premium plan."
-    },
-    BNB: {
-      signal: "BUY",
-      entryPrice: 610,
-      targetPrice: 650,
-      stopLoss: 580,
-      confidence: 68,
-      timeframe: "Current",
-      reasoning: "Token Metrics AI Analysis (Demo): BNB consolidating with neutral technicals. Upgrade for live AI signals."
-    },
-  };
-
-  return symbols.map((symbol) => {
-    const symbolUpper = symbol.toUpperCase();
-    const mock = mockData[symbolUpper] || {
-      signal: "BUY",
-      entryPrice: 0,
-      targetPrice: 0,
-      stopLoss: 0,
-      confidence: 50,
-      timeframe: "N/A",
-      reasoning: `Token Metrics: ${symbolUpper} analysis unavailable in FREE tier. Upgrade to Premium/VIP for comprehensive coverage.`
-    };
-
-    return {
-      symbol: symbolUpper,
-      signal: mock.signal as "BUY" | "SELL",
-      entryPrice: mock.entryPrice || 0,
-      targetPrice: mock.targetPrice || 0,
-      stopLoss: mock.stopLoss || 0,
-      confidence: mock.confidence || 50,
-      timeframe: mock.timeframe || "N/A",
-      reasoning: mock.reasoning || `Demo data for ${symbolUpper}`,
-    };
-  });
 }
 
 export const getTradingSignalsAction: Action = {

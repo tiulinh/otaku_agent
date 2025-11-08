@@ -78,6 +78,17 @@ const PLUGIN_ACTIONS = {
       "Verify transaction status 0x...",
       "How many confirmations for 0x...",
     ]
+  },
+  tokenMetrics: {
+    name: "Token Metrics AI",
+    icon: TrendingUp,
+    description: "AI-powered analysis and trading signals",
+    prompts: [
+      "Analyze BTC and ETH using Token Metrics",
+      "Get trading signals for SOL",
+      "Show portfolio recommendations",
+      "Auto-trade ETH with $100",
+    ]
   }
 }
 

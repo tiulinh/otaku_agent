@@ -10,6 +10,7 @@ import defiLlamaPlugin from './plugins/plugin-defillama/src/index.ts';
 import relayPlugin from './plugins/plugin-relay/src/index.ts';
 import etherscanPlugin from './plugins/plugin-etherscan/src/index.ts';
 import clankerPlugin from './plugins/plugin-clanker/src/index.ts';
+import tokenMetricsPlugin from './plugins/plugin-token-metrics/src/index.ts';
 
 import analyticsPlugin from '@elizaos/plugin-analytics';
 import openrouterPlugin from '@elizaos/plugin-openrouter';
@@ -38,6 +39,7 @@ export const projectAgent: ProjectAgent = {
     mcpPlugin,
     analyticsPlugin,
     clankerPlugin,
+    tokenMetricsPlugin,
     // x402DiscoveryPlugin,
   ],
 };

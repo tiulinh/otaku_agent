@@ -1,5 +1,6 @@
 {
   "$schema": "https://turborepo.org/schema.json",
+  "// Force cache invalidation": "2025-11-08",
   "tasks": {
     "build": {
       "dependsOn": ["^build"],

@@ -48,15 +48,22 @@ export const getTokenAnalysisAction: Action = {
     callback?: HandlerCallback,
   ): Promise<ActionResult> => {
     try {
+      console.log("===== TOKEN METRICS ACTION HANDLER STARTED =====");
+      console.log(`Service type needed: ${TokenMetricsService.serviceType}`);
       logger.info(`[GET_TOKEN_ANALYSIS] Attempting to get service with type: ${TokenMetricsService.serviceType}`);
 
       const svc = runtime.getService(TokenMetricsService.serviceType) as TokenMetricsService | undefined;
 
       if (!svc) {
-        logger.error(`[GET_TOKEN_ANALYSIS] Service not found. Available services: ${JSON.stringify(Array.from((runtime as any).services?.keys() || []))}`);
+        const availableServices = Array.from((runtime as any).services?.keys() || []);
+        console.log("===== SERVICE NOT FOUND =====");
+        console.log(`Requested service type: ${TokenMetricsService.serviceType}`);
+        console.log(`Available services: ${JSON.stringify(availableServices)}`);
+        logger.error(`[GET_TOKEN_ANALYSIS] Service not found. Available services: ${JSON.stringify(availableServices)}`);
         throw new Error(`TokenMetricsService not available. Service type requested: ${TokenMetricsService.serviceType}`);
       }
 
+      console.log("===== SERVICE FOUND SUCCESSFULLY =====");
       logger.info(`[GET_TOKEN_ANALYSIS] Service found successfully`);
 
 

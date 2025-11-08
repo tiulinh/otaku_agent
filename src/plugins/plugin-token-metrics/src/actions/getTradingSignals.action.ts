@@ -39,6 +39,34 @@ async function fetchTradingSignals(symbols: string[], apiKey: string): Promise<T
       });
     }
 
+    // Try to get resistance/support levels and price predictions (may require paid tier)
+    const resistanceSupportMap = new Map();
+    const pricePredictionMap = new Map();
+
+    for (const symbol of symbols) {
+      try {
+        console.log(`[Token Metrics] Fetching resistanceSupport for ${symbol}...`);
+        const rsResult = await client.resistanceSupport.get({ symbol });
+        if (rsResult.success && rsResult.data && rsResult.data.length > 0) {
+          resistanceSupportMap.set(symbol.toUpperCase(), rsResult.data[0]);
+          console.log(`[Token Metrics] ✅ resistanceSupport for ${symbol}: Support=${rsResult.data[0].support}, Resistance=${rsResult.data[0].resistance}`);
+        }
+      } catch (err) {
+        console.log(`[Token Metrics] ⚠️ resistanceSupport for ${symbol} unavailable (${err instanceof Error ? err.message : String(err)})`);
+      }
+
+      try {
+        console.log(`[Token Metrics] Fetching pricePrediction for ${symbol}...`);
+        const ppResult = await client.pricePrediction.get({ symbol });
+        if (ppResult.success && ppResult.data && ppResult.data.length > 0) {
+          pricePredictionMap.set(symbol.toUpperCase(), ppResult.data[0]);
+          console.log(`[Token Metrics] ✅ pricePrediction for ${symbol}: ${ppResult.data[0].predicted_price}`);
+        }
+      } catch (err) {
+        console.log(`[Token Metrics] ⚠️ pricePrediction for ${symbol} unavailable (${err instanceof Error ? err.message : String(err)})`);
+      }
+    }
+
     // Generate signals from Token Metrics data
     const signals: TradingSignal[] = tokensResult.data.map((token: any) => {
       const currentPrice = priceMap.get(token.token_id) || token.current_price || 0;
@@ -55,10 +83,32 @@ async function fetchTradingSignals(symbols: string[], apiKey: string): Promise<T
       const capScore = marketCap > 0 ? Math.min(25, Math.log10(marketCap / 1e9) * 3) : 0;
       const confidence = Math.round(Math.max(55, Math.min(95, 50 + momentumScore + volumeScore + capScore)));
 
-      // Calculate price targets
-      const volatility = Math.abs(priceChange24h) / 100;
-      const targetPrice = currentPrice * (signal === "BUY" ? 1 + volatility * 1.5 : 1 - volatility * 1.2);
-      const stopLoss = currentPrice * (signal === "BUY" ? 1 - volatility * 0.8 : 1 + volatility * 0.8);
+      // Get resistance/support levels if available
+      const rsData = resistanceSupportMap.get(token.token_symbol.toUpperCase());
+      const ppData = pricePredictionMap.get(token.token_symbol.toUpperCase());
+
+      // Calculate price targets - prefer API data, fallback to volatility calculation
+      let targetPrice: number;
+      let stopLoss: number;
+      let predictionInfo = "";
+
+      if (rsData && rsData.resistance && rsData.support) {
+        // Use resistance/support from Token Metrics API
+        targetPrice = signal === "BUY" ? rsData.resistance : rsData.support;
+        stopLoss = signal === "BUY" ? rsData.support : rsData.resistance;
+        console.log(`[Token Metrics] Using resistanceSupport for ${token.token_symbol}: Target=$${targetPrice}, Stop=$${stopLoss}`);
+      } else {
+        // Fallback to volatility-based calculation
+        const volatility = Math.abs(priceChange24h) / 100;
+        targetPrice = currentPrice * (signal === "BUY" ? 1 + volatility * 1.5 : 1 - volatility * 1.2);
+        stopLoss = currentPrice * (signal === "BUY" ? 1 - volatility * 0.8 : 1 + volatility * 0.8);
+        console.log(`[Token Metrics] Using volatility-based calculation for ${token.token_symbol}`);
+      }
+
+      // Add price prediction if available
+      if (ppData && ppData.predicted_price) {
+        predictionInfo = ` | Predicted: $${ppData.predicted_price >= 1 ? ppData.predicted_price.toFixed(2) : ppData.predicted_price.toFixed(6)}`;
+      }
 
       console.log(`[Token Metrics] ${token.token_symbol}: ${signal} at $${currentPrice.toFixed(2)} (${priceChange24h >= 0 ? '+' : ''}${priceChange24h.toFixed(2)}%)`);
 
@@ -70,7 +120,7 @@ async function fetchTradingSignals(symbols: string[], apiKey: string): Promise<T
         stopLoss: stopLoss,
         confidence: confidence,
         timeframe: "24h",
-        reasoning: `Token Metrics: ${token.token_name} @ $${currentPrice >= 1 ? currentPrice.toFixed(2) : currentPrice.toFixed(6)} | 24h: ${priceChange24h >= 0 ? '+' : ''}${priceChange24h.toFixed(2)}% | Vol: $${(volume24h / 1e6).toFixed(1)}M | MCap: $${(marketCap / 1e9).toFixed(2)}B`,
+        reasoning: `Token Metrics: ${token.token_name} @ $${currentPrice >= 1 ? currentPrice.toFixed(2) : currentPrice.toFixed(6)} | 24h: ${priceChange24h >= 0 ? '+' : ''}${priceChange24h.toFixed(2)}% | Vol: $${(volume24h / 1e6).toFixed(1)}M | MCap: $${(marketCap / 1e9).toFixed(2)}B${predictionInfo}`,
       };
     });
 

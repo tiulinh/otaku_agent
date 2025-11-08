@@ -74,6 +74,8 @@ export class TokenMetricsService extends Service {
       url.searchParams.append(key, value);
     });
 
+    console.log("===== CALLING TOKEN METRICS API =====");
+    console.log(`URL: ${url.toString()}`);
     logger.info(`[TokenMetrics] Calling API: ${url.toString()}`);
 
     // Try different authentication methods common in APIs
@@ -93,11 +95,15 @@ export class TokenMetricsService extends Service {
 
         if (response.ok) {
           const data = await response.json();
+          console.log(`===== API SUCCESS with ${config.name} =====`);
+          console.log(`Response data:`, JSON.stringify(data).substring(0, 500));
           logger.info(`[TokenMetrics] API call successful with header: ${config.name}`);
           return data as T;
         }
 
         const errorText = await response.text();
+        console.log(`===== API FAILED with ${config.name}: ${response.status} =====`);
+        console.log(`Error:`, errorText.substring(0, 200));
         logger.warn(`[TokenMetrics] Auth failed with ${config.name}: ${response.status} - ${errorText}`);
         lastError = new Error(`${response.status}: ${errorText}`);
       } catch (error) {
@@ -190,6 +196,8 @@ export class TokenMetricsService extends Service {
    */
   async getTradingSignals(symbols: string[]): Promise<TradingSignal[]> {
     try {
+      console.log("===== TOKEN METRICS getTradingSignals CALLED =====");
+      console.log(`Symbols requested: ${symbols.join(", ")}`);
       logger.info(`[TokenMetrics] Fetching trading signals for: ${symbols.join(", ")}`);
 
       // Call real Token Metrics API

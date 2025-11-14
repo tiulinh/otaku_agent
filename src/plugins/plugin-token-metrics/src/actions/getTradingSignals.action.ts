@@ -233,10 +233,28 @@ export const getTradingSignalsAction: Action = {
       const composedState = await runtime.composeState(message, ["ACTION_STATE"], true);
       const actionParams = composedState?.data?.actionParams as Record<string, string | undefined> | undefined;
 
-      const tokensRaw = actionParams?.tokens ? actionParams.tokens.trim() : undefined;
+      let tokensRaw = actionParams?.tokens ? actionParams.tokens.trim() : undefined;
+
+      // If no tokens in actionParams, try to extract from message content
+      if (!tokensRaw) {
+        const messageText = message.content.text || "";
+        console.log(`[GET_TRADING_SIGNALS] No tokens in actionParams, extracting from message: "${messageText}"`);
+
+        // Look for common token symbols in the message
+        const commonTokens = ["BTC", "ETH", "SOL", "MATIC", "POL", "AVAX", "USDC", "USDT", "BNB", "ADA", "DOT", "LINK"];
+        const foundTokens = commonTokens.filter(token =>
+          new RegExp(`\\b${token}\\b`, "i").test(messageText)
+        );
+
+        if (foundTokens.length > 0) {
+          tokensRaw = foundTokens.join(",");
+          console.log(`[GET_TRADING_SIGNALS] Extracted tokens from message: ${tokensRaw}`);
+          logger.info(`[GET_TRADING_SIGNALS] Extracted tokens from message: ${tokensRaw}`);
+        }
+      }
 
       if (!tokensRaw) {
-        const errorMsg = "Missing required parameter 'tokens'.";
+        const errorMsg = "Missing required parameter 'tokens'. Please specify which tokens to analyze (e.g., 'BTC', 'ETH').";
         logger.error(`[GET_TRADING_SIGNALS] ${errorMsg}`);
         return {
           text: errorMsg,

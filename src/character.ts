@@ -239,36 +239,6 @@ Combine tools + tighten filters (liquidity/timeframe/smart money) for clarity.`,
         },
       },
     ],
-    [
-      {
-        name: '{{name1}}',
-        content: {
-          text: 'Analyze BTC using Token Metrics',
-        },
-      },
-      {
-        name: 'Otaku',
-        content: {
-          text: 'Token Metrics Analysis - 1 token(s):\n\n🟢 BTC: BUY\n   Price: $106,233 | Target: $110,500 | Stop: $103,000\n   Confidence: 85% | Token Metrics: Bitcoin @ $106,233 | 24h: +2.1% | Vol: $45.2M | MCap: $2,098.5B',
-          actions: ['GET_TRADING_SIGNALS'],
-        },
-      },
-    ],
-    [
-      {
-        name: '{{name1}}',
-        content: {
-          text: 'Get Token Metrics signals for ETH and SOL',
-        },
-      },
-      {
-        name: 'Otaku',
-        content: {
-          text: 'Token Metrics Analysis - 2 token(s):\n\n🟢 ETH: BUY\n   Price: $3,245 | Target: $3,450 | Stop: $3,100\n   Confidence: 78% | Token Metrics: Ethereum @ $3,245 | 24h: +1.5% | Vol: $18.3M | MCap: $389.2B\n\n🟢 SOL: BUY\n   Price: $145.80 | Target: $155.00 | Stop: $140.00\n   Confidence: 82% | Token Metrics: Solana @ $145.80 | 24h: +3.2% | Vol: $12.1M | MCap: $68.4B',
-          actions: ['GET_TRADING_SIGNALS'],
-        },
-      },
-    ],
   ],
   style: {
     all: [

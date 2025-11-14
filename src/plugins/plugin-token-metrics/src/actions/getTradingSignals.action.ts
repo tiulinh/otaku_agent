@@ -30,71 +30,12 @@ async function fetchTradingSignals(symbols: string[], apiKey: string): Promise<T
 
     console.log(`[Token Metrics] ✅ Retrieved ${tokensResult.data.length} tokens`);
 
-    // Filter to get the most relevant token for each requested symbol
-    // Token Metrics returns multiple tokens with same symbol (e.g., "BTC" returns 10+ tokens)
-    // We want the main token (highest market cap or well-known slug)
-    const symbolToTokenIdMap: Record<string, number> = {
-      'BTC': 3375,      // Bitcoin
-      'BITCOIN': 3375,
-      'ETH': 1027,      // Ethereum
-      'ETHEREUM': 1027,
-      'SOL': 5426,      // Solana
-      'SOLANA': 5426,
-      'MATIC': 3890,    // Polygon
-      'POLYGON': 3890,
-      'POL': 3890,
-      'AVAX': 5805,     // Avalanche
-      'AVALANCHE': 5805,
-    };
-
-    const filteredTokens: any[] = [];
-    for (const requestedSymbol of symbols) {
-      const upperSymbol = requestedSymbol.toUpperCase();
-      const knownTokenId = symbolToTokenIdMap[upperSymbol];
-
-      // Find matching token - prefer known token_id, fallback to highest market cap
-      const matchingTokens = tokensResult.data.filter((t: any) =>
-        t.token_symbol.toUpperCase() === upperSymbol
-      );
-
-      let bestToken;
-      if (knownTokenId) {
-        // Use known token ID if available
-        bestToken = matchingTokens.find((t: any) => t.token_id === knownTokenId);
-      }
-
-      if (!bestToken && matchingTokens.length > 0) {
-        // Fallback: pick token with highest market cap
-        bestToken = matchingTokens.reduce((best: any, current: any) => {
-          const bestMcap = best.market_cap || 0;
-          const currentMcap = current.market_cap || 0;
-          return currentMcap > bestMcap ? current : best;
-        });
-      }
-
-      if (bestToken) {
-        console.log(`[Token Metrics] Selected ${bestToken.token_name} (${bestToken.token_symbol}, ID: ${bestToken.token_id}) for symbol ${requestedSymbol}`);
-        filteredTokens.push(bestToken);
-      } else {
-        console.log(`[Token Metrics] ⚠️ No token found for symbol ${requestedSymbol}`);
-      }
-    }
-
-    if (filteredTokens.length === 0) {
-      throw new Error("No matching tokens found for requested symbols");
-    }
-
     // Get price data for more accuracy
     const priceResult = await client.price.get({ symbol: symbols.join(",") });
     const priceMap = new Map();
     if (priceResult.success && priceResult.data) {
-      // Build map of latest prices per token_id
       priceResult.data.forEach((p: any) => {
-        const existingPrice = priceMap.get(p.token_id);
-        // Keep the most recent non-null price
-        if (!existingPrice || (p.current_price && !existingPrice)) {
-          priceMap.set(p.token_id, p.current_price);
-        }
+        priceMap.set(p.token_id, p.current_price);
       });
     }
 
@@ -126,8 +67,8 @@ async function fetchTradingSignals(symbols: string[], apiKey: string): Promise<T
       }
     }
 
-    // Generate signals from Token Metrics data (using filtered tokens)
-    const signals: TradingSignal[] = filteredTokens.map((token: any) => {
+    // Generate signals from Token Metrics data
+    const signals: TradingSignal[] = tokensResult.data.map((token: any) => {
       const currentPrice = priceMap.get(token.token_id) || token.current_price || 0;
       const priceChange24h = token.price_change_percentage_24h_in_currency || 0;
       const marketCap = token.market_cap || 0;
@@ -233,28 +174,10 @@ export const getTradingSignalsAction: Action = {
       const composedState = await runtime.composeState(message, ["ACTION_STATE"], true);
       const actionParams = composedState?.data?.actionParams as Record<string, string | undefined> | undefined;
 
-      let tokensRaw = actionParams?.tokens ? actionParams.tokens.trim() : undefined;
-
-      // If no tokens in actionParams, try to extract from message content
-      if (!tokensRaw) {
-        const messageText = message.content.text || "";
-        console.log(`[GET_TRADING_SIGNALS] No tokens in actionParams, extracting from message: "${messageText}"`);
-
-        // Look for common token symbols in the message
-        const commonTokens = ["BTC", "ETH", "SOL", "MATIC", "POL", "AVAX", "USDC", "USDT", "BNB", "ADA", "DOT", "LINK"];
-        const foundTokens = commonTokens.filter(token =>
-          new RegExp(`\\b${token}\\b`, "i").test(messageText)
-        );
-
-        if (foundTokens.length > 0) {
-          tokensRaw = foundTokens.join(",");
-          console.log(`[GET_TRADING_SIGNALS] Extracted tokens from message: ${tokensRaw}`);
-          logger.info(`[GET_TRADING_SIGNALS] Extracted tokens from message: ${tokensRaw}`);
-        }
-      }
+      const tokensRaw = actionParams?.tokens ? actionParams.tokens.trim() : undefined;
 
       if (!tokensRaw) {
-        const errorMsg = "Missing required parameter 'tokens'. Please specify which tokens to analyze (e.g., 'BTC', 'ETH').";
+        const errorMsg = "Missing required parameter 'tokens'.";
         logger.error(`[GET_TRADING_SIGNALS] ${errorMsg}`);
         return {
           text: errorMsg,

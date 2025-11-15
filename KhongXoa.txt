@@ -1,0 +1,7 @@
+https://github.com/token-metrics/tmai-api-sdk-typescript?tab=readme-ov-file
+https://github.com/token-metrics/tmai-api/blob/master/js/examples/express-server.js
+https://github.com/token-metrics/plugin-tokenmetrics
+
+Phiên bản chuẩn nhất:
+https://github.com/tiulinh/otaku_agent/commit/8443e56c9cc79b598564becb30d6adbdf30f179c
+

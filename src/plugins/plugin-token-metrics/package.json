@@ -23,7 +23,7 @@
   },
   "dependencies": {
     "@elizaos/core": "1.6.4",
-    "tmai-api": "^1.0.18"
+    "tmai-api": "^3.3.0"
   },
   "peerDependencies": {
     "@elizaos/core": "1.6.4"

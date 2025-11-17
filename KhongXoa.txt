@@ -5,3 +5,20 @@ https://github.com/token-metrics/plugin-tokenmetrics
 Phiên bản chuẩn nhất:
 https://github.com/tiulinh/otaku_agent/commit/8443e56c9cc79b598564becb30d6adbdf30f179c
 
+debug:
+  Plugin plugin-token-metrics thiếu file build configuration (package.json, build.ts, tsconfig.json), dẫn đến:
+  - Plugin không được build ra thư mục dist/
+  - Khi agent runtime chạy, không tìm thấy built plugin
+  - Actions GET_TOKEN_ANALYSIS và GET_TRADING_SIGNALS không được đăng ký
+  - Agent bị stuck ở bước "analyzing your request"
+
+  Đã fix:
+
+  1. ✅ Tạo package.json - khai báo dependencies (tmai-api, @elizaos/core)
+  2. ✅ Tạo build.ts - build script sử dụng Bun.build
+  3. ✅ Tạo tsconfig.json - TypeScript configuration
+  4. ✅ Build plugin thành công → dist/index.js (145 KB)
+  5. ✅ Build backend thành công → dist/index.js (11 MB)
+  6. ✅ Commit và push lên GitHub
+
+

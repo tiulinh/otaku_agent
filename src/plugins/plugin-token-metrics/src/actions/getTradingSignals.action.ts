@@ -30,14 +30,50 @@ async function fetchTradingSignals(symbols: string[], apiKey: string): Promise<T
 
     console.log(`[Token Metrics] ✅ Retrieved ${tokensResult.data.length} tokens`);
 
-    // Get price data for more accuracy
+    // Get price data for more accuracy - use LATEST price only
     const priceResult = await client.price.get({ symbol: symbols.join(",") });
     const priceMap = new Map();
     if (priceResult.success && priceResult.data) {
+      // Group by token_id and keep only the most recent price
+      const pricesByToken = new Map<number, any[]>();
       priceResult.data.forEach((p: any) => {
-        priceMap.set(p.token_id, p.current_price);
+        if (!pricesByToken.has(p.token_id)) {
+          pricesByToken.set(p.token_id, []);
+        }
+        pricesByToken.get(p.token_id)!.push(p);
+      });
+
+      // For each token, get the latest non-null price
+      pricesByToken.forEach((prices, tokenId) => {
+        const sortedPrices = prices.sort((a, b) =>
+          new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+        );
+        const latestPrice = sortedPrices.find(p => p.current_price !== null && p.current_price !== undefined);
+        if (latestPrice) {
+          priceMap.set(tokenId, latestPrice.current_price);
+          console.log(`[Token Metrics] Using latest price for token_id ${tokenId}: $${latestPrice.current_price} (${latestPrice.timestamp.split('T')[0]})`);
+        }
       });
     }
+
+    // Filter to keep only the token with highest market cap for each symbol
+    // Token Metrics API returns multiple tokens with same symbol (e.g., 10+ "BTC" tokens)
+    const symbolToTokenMap = new Map<string, any>();
+    tokensResult.data.forEach((token: any) => {
+      const symbol = token.token_symbol.toUpperCase();
+      const existing = symbolToTokenMap.get(symbol);
+
+      // Keep token with highest market cap
+      if (!existing || (token.market_cap || 0) > (existing.market_cap || 0)) {
+        symbolToTokenMap.set(symbol, token);
+      }
+    });
+
+    const filteredTokens = Array.from(symbolToTokenMap.values());
+    console.log(`[Token Metrics] Filtered ${tokensResult.data.length} tokens → ${filteredTokens.length} unique (highest market cap)`);
+    filteredTokens.forEach((t: any) => {
+      console.log(`[Token Metrics] - ${t.token_symbol}: ${t.token_name} (token_id: ${t.token_id}, market_cap: $${((t.market_cap || 0) / 1e9).toFixed(2)}B)`);
+    });
 
     // Try to get resistance/support levels and price predictions (may require paid tier)
     const resistanceSupportMap = new Map();
@@ -67,25 +103,46 @@ async function fetchTradingSignals(symbols: string[], apiKey: string): Promise<T
       }
     }
 
-    // Generate signals from Token Metrics data
-    const signals: TradingSignal[] = tokensResult.data.map((token: any) => {
+    // Generate signals from filtered Token Metrics data
+    const signals: TradingSignal[] = filteredTokens.map((token: any) => {
       const currentPrice = priceMap.get(token.token_id) || token.current_price || 0;
       const priceChange24h = token.price_change_percentage_24h_in_currency || 0;
       const marketCap = token.market_cap || 0;
       const volume24h = token.total_volume || 0;
 
-      // Generate signal based on price momentum
-      const signal: "BUY" | "SELL" = priceChange24h >= 0 ? "BUY" : "SELL";
+      // Get resistance/support and price prediction data (if available - PAID tier only)
+      const rsData = resistanceSupportMap.get(token.token_symbol.toUpperCase());
+      const ppData = pricePredictionMap.get(token.token_symbol.toUpperCase());
+
+      // Generate signal - use AI price prediction (PAID tier) or show warning (FREE tier)
+      let signal: "BUY" | "SELL" | "HOLD";
+      let signalSource: string;
+
+      if (ppData && ppData.predicted_price && currentPrice > 0) {
+        // PAID tier: Use AI predicted price comparison
+        if (ppData.predicted_price > currentPrice) {
+          signal = "BUY";
+          signalSource = `AI prediction ($${ppData.predicted_price.toFixed(2)} > $${currentPrice.toFixed(2)})`;
+        } else if (ppData.predicted_price < currentPrice) {
+          signal = "SELL";
+          signalSource = `AI prediction ($${ppData.predicted_price.toFixed(2)} < $${currentPrice.toFixed(2)})`;
+        } else {
+          signal = "HOLD";
+          signalSource = `AI prediction (equal price)`;
+        }
+        console.log(`[Token Metrics] ${token.token_symbol} signal: ${signal} from ${signalSource}`);
+      } else {
+        // FREE tier: Cannot predict without pricePrediction API
+        signal = "HOLD";
+        signalSource = "FREE tier - upgrade to get BUY/SELL signals";
+        console.log(`[Token Metrics] ⚠️ ${token.token_symbol}: ${signalSource}`);
+      }
 
       // Calculate confidence from market data
       const momentumScore = Math.min(40, Math.abs(priceChange24h) * 5);
       const volumeScore = volume24h > 0 ? Math.min(20, Math.log10(volume24h / 1e6) * 2) : 0;
       const capScore = marketCap > 0 ? Math.min(25, Math.log10(marketCap / 1e9) * 3) : 0;
       const confidence = Math.round(Math.max(55, Math.min(95, 50 + momentumScore + volumeScore + capScore)));
-
-      // Get resistance/support levels if available
-      const rsData = resistanceSupportMap.get(token.token_symbol.toUpperCase());
-      const ppData = pricePredictionMap.get(token.token_symbol.toUpperCase());
 
       // Calculate price targets - prefer API data, fallback to volatility calculation
       let targetPrice: number;
@@ -99,10 +156,12 @@ async function fetchTradingSignals(symbols: string[], apiKey: string): Promise<T
         console.log(`[Token Metrics] Using resistanceSupport for ${token.token_symbol}: Target=$${targetPrice}, Stop=$${stopLoss}`);
       } else {
         // Fallback to volatility-based calculation
-        const volatility = Math.abs(priceChange24h) / 100;
+        // If price change data is unavailable (free tier), use 2% default volatility
+        const defaultVolatility = 0.02; // 2% default for free tier
+        const volatility = priceChange24h !== 0 ? Math.abs(priceChange24h) / 100 : defaultVolatility;
         targetPrice = currentPrice * (signal === "BUY" ? 1 + volatility * 1.5 : 1 - volatility * 1.2);
         stopLoss = currentPrice * (signal === "BUY" ? 1 - volatility * 0.8 : 1 + volatility * 0.8);
-        console.log(`[Token Metrics] Using volatility-based calculation for ${token.token_symbol}`);
+        console.log(`[Token Metrics] Using volatility-based calculation for ${token.token_symbol} (volatility: ${(volatility * 100).toFixed(2)}%)`);
       }
 
       // Add price prediction if available
@@ -112,6 +171,14 @@ async function fetchTradingSignals(symbols: string[], apiKey: string): Promise<T
 
       console.log(`[Token Metrics] ${token.token_symbol}: ${signal} at $${currentPrice.toFixed(2)} (${priceChange24h >= 0 ? '+' : ''}${priceChange24h.toFixed(2)}%)`);
 
+      // Build reasoning text
+      let reasoning = `Token Metrics: ${token.token_name} @ $${currentPrice >= 1 ? currentPrice.toFixed(2) : currentPrice.toFixed(6)} | 24h: ${priceChange24h >= 0 ? '+' : ''}${priceChange24h.toFixed(2)}% | Vol: $${(volume24h / 1e6).toFixed(1)}M | MCap: $${(marketCap / 1e9).toFixed(2)}B${predictionInfo}`;
+
+      // Add FREE tier warning if signal is HOLD
+      if (signal === "HOLD" && (!ppData || !ppData.predicted_price)) {
+        reasoning += ` | ⚠️ FREE tier: Upgrade to PAID tier for accurate BUY/SELL signals`;
+      }
+
       return {
         symbol: token.token_symbol.toUpperCase(),
         signal: signal,
@@ -120,7 +187,7 @@ async function fetchTradingSignals(symbols: string[], apiKey: string): Promise<T
         stopLoss: stopLoss,
         confidence: confidence,
         timeframe: "24h",
-        reasoning: `Token Metrics: ${token.token_name} @ $${currentPrice >= 1 ? currentPrice.toFixed(2) : currentPrice.toFixed(6)} | 24h: ${priceChange24h >= 0 ? '+' : ''}${priceChange24h.toFixed(2)}% | Vol: $${(volume24h / 1e6).toFixed(1)}M | MCap: $${(marketCap / 1e9).toFixed(2)}B${predictionInfo}`,
+        reasoning: reasoning,
       };
     });
 

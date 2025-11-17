@@ -13,7 +13,7 @@ export interface TokenAnalysis {
 
 export interface TradingSignal {
   symbol: string;
-  signal: "BUY" | "SELL";
+  signal: "BUY" | "SELL" | "HOLD";
   entryPrice: number;
   targetPrice: number;
   stopLoss: number;

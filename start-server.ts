@@ -3,7 +3,8 @@
  * Custom server start script that uses our custom UI
  */
 
-import { AgentServer, loadCharacters } from '@elizaos/server';
+// @ts-expect-error - Server package built module
+import { AgentServer } from '@elizaos/server';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -22,7 +23,8 @@ async function main() {
   // Load characters from project
   const projectPath = path.resolve(__dirname, 'dist/index.js');
   console.log(`Loading project from: ${projectPath}`);
-  
+
+  // @ts-ignore - Dynamic import of built project
   const project = await import(projectPath);
   const projectModule = project.default || project;
   

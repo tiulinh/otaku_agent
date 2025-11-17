@@ -33,7 +33,6 @@
     "@elizaos/api-client": "workspace:*",
     "@elizaos/cli": "1.6.4",
     "@elizaos/core": "1.6.4",
-    "@elizaos/plugin-analytics": "^1.0.1",
     "@elizaos/plugin-anthropic": "^1.0.6",
     "@elizaos/plugin-bootstrap": "workspace:*",
     "@elizaos/plugin-mcp": "^1.2.0",

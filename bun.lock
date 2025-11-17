@@ -13,7 +13,6 @@
         "@elizaos/api-client": "workspace:*",
         "@elizaos/cli": "1.6.4",
         "@elizaos/core": "1.6.4",
-        "@elizaos/plugin-analytics": "^1.0.1",
         "@elizaos/plugin-anthropic": "^1.0.6",
         "@elizaos/plugin-bootstrap": "workspace:*",
         "@elizaos/plugin-mcp": "^1.2.0",
@@ -288,8 +287,6 @@
     "@elizaos/cli": ["@elizaos/cli@1.6.4", "", { "dependencies": { "@clack/prompts": "^0.11.0", "@elizaos/api-client": "1.6.4", "@elizaos/core": "1.6.4", "@elizaos/plugin-bootstrap": "1.6.4", "@elizaos/plugin-openai": "1.5.15", "@elizaos/plugin-sql": "1.6.4", "@elizaos/server": "1.6.4", "bun": "^1.2.21", "chalk": "^5.4.1", "chokidar": "^4.0.3", "commander": "^14.0.0", "dotenv": "^17.2.3", "execa": "^9.6.0", "form-data": "^4.0.0", "fs-extra": "^11.1.0", "globby": "^15.0.0", "https-proxy-agent": "^7.0.6", "ignore": "^6.0.2", "lodash": "^4.17.21", "node-fetch": "^3.3.2", "ora": "^9.0.0", "rimraf": "6.0.1", "semver": "^7.7.2", "simple-git": "^3.27.0", "tar": "^7.5.1", "tiktoken": "^1.0.18", "tsconfig-paths": "^4.2.0", "type-fest": "^5.0.1", "yoctocolors": "^2.1.1", "zod": "4.1.11" }, "bin": { "elizaos": "dist/index.js" } }, "sha512-a7ErGe7d6z3FkY/RuvXZ4nz5GhlpOse9AvEDv9fiVChpN8CEvjxKnFzhET05rU5XL6yUv7S6+E344/YURko+tQ=="],
 
     "@elizaos/core": ["@elizaos/core@1.6.4", "", { "dependencies": { "adze": "^2.2.5", "crypto-browserify": "^3.12.0", "dotenv": "17.2.3", "glob": "11.0.3", "handlebars": "^4.7.8", "langchain": "^0.3.35", "pdfjs-dist": "^5.2.133", "unique-names-generator": "4.7.1", "uuid": "13.0.0", "zod": "4.1.11" } }, "sha512-9c72Ofw4Xoa9xvehaZ9qApT76vjJnfAzzyIbai2LGaxfF4BL0KJhcR/Xp4NJDKj9vKka85tQpFBwtxQQIZNhvA=="],
-
-    "@elizaos/plugin-analytics": ["@elizaos/plugin-analytics@1.0.1", "", { "dependencies": { "@elizaos/core": "latest", "axios": "^1.7.9", "typescript": "^5.8.3", "zod": "4.1.11" } }, "sha512-T5S2I5J0XjZQbjMZcKZSlTpDCWktoHNjeBOQgf+WS7K77DSdsr03LPkMzGQyabLtcNYu3kuou60yVonrKAW3Lw=="],
 
     "@elizaos/plugin-anthropic": ["@elizaos/plugin-anthropic@1.5.12", "", { "dependencies": { "@ai-sdk/anthropic": "^2.0.17", "@elizaos/core": "^1.6.1", "ai": "^5.0.47", "jsonrepair": "^3.12.0", "undici": "^7.16.0" } }, "sha512-4dKZ2YWFB/j2utLuRJvrwhYNb0RfIxbZyQeAPRWHwTI5bMWxI6H2UqqeAtyw1EwPHctA+uIGBLWhtyM3ROaCNw=="],
 
@@ -2952,8 +2949,6 @@
     "@elizaos/cli/zod": ["zod@4.1.11", "", {}, "sha512-WPsqwxITS2tzx1bzhIKsEs19ABD5vmCVa4xBo2tq/SrV4RNZtfws1EnCWQXM6yh8bD08a1idvkB5MZSBiZsjwg=="],
 
     "@elizaos/core/zod": ["zod@4.1.11", "", {}, "sha512-WPsqwxITS2tzx1bzhIKsEs19ABD5vmCVa4xBo2tq/SrV4RNZtfws1EnCWQXM6yh8bD08a1idvkB5MZSBiZsjwg=="],
-
-    "@elizaos/plugin-analytics/zod": ["zod@4.1.11", "", {}, "sha512-WPsqwxITS2tzx1bzhIKsEs19ABD5vmCVa4xBo2tq/SrV4RNZtfws1EnCWQXM6yh8bD08a1idvkB5MZSBiZsjwg=="],
 
     "@elizaos/plugin-sql/dotenv": ["dotenv@16.6.1", "", {}, "sha512-uBq4egWHTcTt33a72vpSG0z3HnPuIl6NqYcTrKEg2azoEyl2hpW0zqlxysq2pK9HlDIHyHyakeYaYnSAwd8bow=="],
 

@@ -12,7 +12,7 @@ import etherscanPlugin from './plugins/plugin-etherscan/src/index.ts';
 import clankerPlugin from './plugins/plugin-clanker/src/index.ts';
 import tokenMetricsPlugin from './plugins/plugin-token-metrics/src/index.ts';
 
-import analyticsPlugin from '@elizaos/plugin-analytics';
+// import analyticsPlugin from '@elizaos/plugin-analytics'; // DISABLED: Causes version conflict with @elizaos/core
 import openrouterPlugin from '@elizaos/plugin-openrouter';
 import mcpPlugin from '@elizaos/plugin-mcp';
 
@@ -37,7 +37,7 @@ export const projectAgent: ProjectAgent = {
     relayPlugin,
     etherscanPlugin,
     mcpPlugin,
-    analyticsPlugin,
+    // analyticsPlugin, // DISABLED: Causes version conflict
     clankerPlugin,
     tokenMetricsPlugin,
     // x402DiscoveryPlugin,

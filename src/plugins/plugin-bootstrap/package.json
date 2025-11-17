@@ -22,13 +22,13 @@
     "typecheck": "tsc --project tsconfig.build.json --noEmit"
   },
   "dependencies": {
-    "@elizaos/core": "alpha",
+    "@elizaos/core": "1.6.4",
     "unique-names-generator": "^4.7.1",
     "uuid": "^13.0.0",
     "zod": "^4.1.12"
   },
   "peerDependencies": {
-    "@elizaos/core": "alpha"
+    "@elizaos/core": "1.6.4"
   },
   "devDependencies": {
     "@types/bun": "^1.2.21",

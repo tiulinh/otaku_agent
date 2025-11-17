@@ -7,15 +7,15 @@ async function build() {
   console.log('Building plugin-token-metrics...');
 
   const result = await Bun.build({
-    entrypoints: ['src/index.ts'],
-    outdir: 'dist',
+    entrypoints: ['./src/index.ts'],
+    outdir: './dist',
     target: 'node',
     format: 'esm',
     external: [
       '@elizaos/core',
       'tmai-api',
     ],
-    sourcemap: 'external',
+    sourcemap: 'inline',
     minify: false,
   });
 

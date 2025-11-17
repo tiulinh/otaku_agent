@@ -2,7 +2,6 @@
   "compilerOptions": {
     "target": "ES2022",
     "module": "ESNext",
-    "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "jsx": "react-jsx",
     "moduleResolution": "bundler",
     "resolveJsonModule": true,
@@ -13,9 +12,6 @@
     "strict": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
-    "declaration": true,
-    "declarationMap": true,
-    "outDir": "./dist",
     "baseUrl": ".",
     "paths": {
       "@/*": ["./src/frontend/*"],

@@ -1,20 +1,15 @@
 {
-  "extends": "../../../tsconfig.json",
   "compilerOptions": {
-    "outDir": "./dist",
-    "declarationDir": "./dist",
-    "declaration": true,
-    "declarationMap": true,
-    "skipLibCheck": true,
-    "noEmit": false,
-    "allowImportingTsExtensions": false,
-    "moduleResolution": "node",
     "target": "ES2022",
-    "lib": ["ES2022"],
-    "downlevelIteration": true,
+    "module": "ESNext",
+    "moduleResolution": "bundler",
     "esModuleInterop": true,
-    "allowSyntheticDefaultImports": true
+    "allowSyntheticDefaultImports": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "resolveJsonModule": true,
+    "noEmit": true
   },
   "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist", "src/**/*.test.ts", "**/*.spec.ts"]
+  "exclude": ["node_modules", "dist"]
 }

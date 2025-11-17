@@ -1,0 +1,39 @@
+{
+  "name": "plugin-token-metrics",
+  "version": "1.0.0",
+  "description": "Token Metrics AI-powered crypto analysis, trading signals, portfolio recommendations, and auto-trading capabilities",
+  "type": "module",
+  "main": "dist/index.js",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "bun run build.ts",
+    "dev": "bun run build.ts --watch",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@elizaos/core": "1.6.4",
+    "tmai-api": "^1.0.18"
+  },
+  "peerDependencies": {
+    "@elizaos/core": "1.6.4"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.2.21",
+    "@types/node": "^22.15.3",
+    "typescript": "^5.6.3"
+  },
+  "engines": {
+    "bun": ">=1.2.0"
+  }
+}

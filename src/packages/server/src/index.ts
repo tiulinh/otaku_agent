@@ -185,10 +185,24 @@ export class AgentServer {
       // Merge character plugins with provided plugins and add server-required plugins
       const allPlugins = [...(character.plugins || []), ...plugins, sqlPlugin];
 
-      const allSettings = {
-        ...character.settings,
-        ...process.env,
-      };
+      // Convert all settings to string | undefined to match RuntimeSettings type
+      const allSettings: Record<string, string | undefined> = {};
+
+      // First, copy character settings (convert to string if needed)
+      if (character.settings) {
+        for (const [key, value] of Object.entries(character.settings)) {
+          if (value !== undefined) {
+            allSettings[key] = typeof value === 'string' ? value : String(value);
+          }
+        }
+      }
+
+      // Then, merge process.env (all values are already strings)
+      for (const [key, value] of Object.entries(process.env)) {
+        if (value !== undefined) {
+          allSettings[key] = value;
+        }
+      }
 
       return {
         character: encryptedCharacter(character),
@@ -731,6 +745,83 @@ export class AgentServer {
         }
       );
 
+      // ============================================================
+      // ERC-8004 AGENT CARD ENDPOINT
+      // ============================================================
+      this.app.get('/.well-known/agent-card.json', (_req, res) => {
+        const agentCard = {
+          name: 'DauGia NFT AI Agent',
+          description: 'AI Agent for NFT auction and trend analysis',
+          version: '1.0.0',
+          registrations: [
+            {
+              agentId: 1,
+              agentDomain: 'daugianft.site',
+              agentAddress: 'eip155:84532:0x71D8679Ca0eCfCaB431327A95aAdBa2b664cd744',
+              registryContract: 'eip155:84532:0x1E5f60eDD5B133fDb2b0740589FA4f1Ffb4f1A63',
+              signature:
+                '0xf16fb6119ff8b10ae28bb38fe3dbe05594535f59e90e20b127c2201c24dd9792504f5767d1bc3cc315f921b782370dfc93f3cd3880880f9821a36c577a29dab51b',
+            },
+          ],
+          capabilities: [
+            {
+              skillId: 'nft-auction-analysis',
+              name: 'NFT Auction Analysis',
+              description: 'Token/coin price trend analysis',
+              inputFormat: 'JSON',
+              outputFormat: 'JSON',
+            },
+            {
+              skillId: 'token-trend-analysis',
+              name: 'Token Trend Analysis',
+              description: 'Token/coin price trend analysis',
+              inputFormat: 'JSON',
+              outputFormat: 'JSON',
+            },
+          ],
+          accessRequirements: {
+            minimumHold: {
+              tokenAddress: '0x89815998E8910dc3f237359F2A778BcC425D1170',
+              tokenSymbol: 'DGN',
+              amount: '100',
+              chain: 'eip155:84532',
+              description: 'Hold token to use agent',
+            },
+          },
+          pricing: {
+            paymentMethods: [
+              {
+                type: 'Native',
+                symbol: 'ETH',
+                chain: 'eip155:84532',
+                pricePerRequest: '0.001',
+              },
+            ],
+          },
+          endpoints: {
+            api: 'https://daugianft.site/api/v1',
+            websocket: 'wss://daugianft.site/ws',
+            docs: 'https://daugianft.site/docs',
+          },
+          contact: {
+            website: 'https://daugianft.site',
+            email: 'support@daugianft.site',
+          },
+          metadata: {
+            createdAt: '2025-11-16T08:26:46.752Z',
+            updatedAt: new Date().toISOString(),
+            version: '1.0.0',
+            chainId: 84532,
+            network: 'Base Sepolia',
+          },
+        };
+
+        res.setHeader('Content-Type', 'application/json');
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        res.json(agentCard);
+        logger.debug('[ERC-8004] Served agent-card.json');
+      });
+
       // Channel-specific media serving
       this.app.get(
         '/media/uploads/channels/:channelId/:filename',
@@ -1035,6 +1126,10 @@ export class AgentServer {
               code: 404,
             },
           });
+        } else if (_req.path.startsWith('/.well-known/')) {
+          // Skip SPA fallback for .well-known routes (already handled above)
+          // If we're here, the file doesn't exist
+          res.status(404).json({ error: 'Resource not found' });
         } else {
           // Not an API route, continue to next middleware
           next();
@@ -1045,6 +1140,13 @@ export class AgentServer {
       // Use a final middleware that handles all unmatched routes
       if (this.isWebUIEnabled) {
         (this.app as any).use((req: express.Request, res: express.Response) => {
+          // Skip SPA fallback for .well-known routes (handled earlier)
+          if (req.path.startsWith('/.well-known/')) {
+            // If we're here, it means the route handler above didn't catch it
+            // This shouldn't happen, but return 404 just in case
+            return res.status(404).json({ error: 'Resource not found' });
+          }
+
           // For JavaScript requests that weren't handled by static middleware,
           // return a JavaScript response instead of HTML
           if (

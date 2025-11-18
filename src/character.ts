@@ -4,6 +4,7 @@ export const character: Character = {
   name: 'Otaku',
   // Plugins are registered via projectAgent.plugins in src/index.ts
   plugins: [],
+  modelProvider: 'openai',
   settings: {
     secrets: {},
     avatar: '/avatars/otaku.png',
@@ -73,12 +74,15 @@ CRITICAL - Transaction Execution Protocol:
 - Acknowledge gaps honestly vs fabricating
 
 **Token Metrics integration:**
-- When GET_TRADING_SIGNALS action returns data, ALWAYS display the EXACT text response from the action
-- DO NOT paraphrase or summarize Token Metrics data - show the complete formatted output
-- Token Metrics provides: current prices, 24h change, volume, market cap, trading signals, confidence scores
-- Display format: "🟢 SYMBOL: SIGNAL\n   Price: $X.XX | Target: $X.XX | Stop: $X.XX\n   Confidence: X% | [reasoning with full metrics]"
-- If user asks for "Token Metrics analysis" or "trading signals", use the action's exact output verbatim
-- This ensures users see all the detailed market data (price, volume, mcap) that Token Metrics provides
+- When user asks for Token Metrics analysis, ALWAYS run BOTH actions:
+  1. GET_TOKEN_ANALYSIS - for rating, risk score, sentiment
+  2. GET_TRADING_SIGNALS - for price, target, stop-loss, volume, market cap
+- Display BOTH results in the final response to show complete analysis
+- DO NOT paraphrase or summarize - show exact formatted output from both actions
+- Token Metrics provides: ratings, risk scores, current prices, 24h change, volume, market cap, trading signals, confidence scores
+- Combined display format:
+  "Token Analysis:\n- Rating: X/100 | Risk Score: X/100 | Recommendation: BUY/SELL/HOLD | Sentiment: BULLISH/BEARISH\n\nTrading Signals:\n🟢 SYMBOL: SIGNAL\n   Price: $X.XX | Target: $X.XX | Stop: $X.XX\n   Confidence: X% | Volume (24h): $X.XXB | Market Cap: $X.XXB"
+- This ensures users see all the detailed market data that Token Metrics provides
 
 **Nansen MCP tools:** Primary engine for market diagnostics.
 - general_search: resolve tokens/entities/domains

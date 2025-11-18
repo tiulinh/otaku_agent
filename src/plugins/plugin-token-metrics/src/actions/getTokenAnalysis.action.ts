@@ -167,16 +167,57 @@ export const getTokenAnalysisAction: Action = {
       const msg = error instanceof Error ? error.message : String(error);
       logger.error(`[GET_TOKEN_ANALYSIS] Action failed: ${msg}`);
 
+      // Detect rate limit errors
+      const isRateLimit =
+        msg.toLowerCase().includes('rate limit') ||
+        msg.toLowerCase().includes('429') ||
+        msg.toLowerCase().includes('too many requests') ||
+        msg.toLowerCase().includes('quota exceeded');
+
+      // Detect authentication/API key errors
+      const isAuthError =
+        msg.toLowerCase().includes('401') ||
+        msg.toLowerCase().includes('403') ||
+        msg.toLowerCase().includes('unauthorized') ||
+        msg.toLowerCase().includes('api key') ||
+        msg.toLowerCase().includes('authentication');
+
+      let userFriendlyMessage = `Failed to fetch token analysis: ${msg}`;
+      let errorType = "action_failed";
+
+      if (isRateLimit) {
+        userFriendlyMessage = `🚨 RATE LIMIT: Token Metrics API has hit its rate limit. Please wait a few minutes or upgrade your Token Metrics plan. Error: ${msg}`;
+        errorType = "rate_limit";
+      } else if (isAuthError) {
+        userFriendlyMessage = `🔑 AUTH ERROR: Token Metrics API key is invalid or unauthorized. Please check your TOKENMETRICS_API_KEY in .env file. Error: ${msg}`;
+        errorType = "auth_error";
+      } else if (msg.toLowerCase().includes('free tier') || msg.toLowerCase().includes('upgrade')) {
+        userFriendlyMessage = `⚠️ FREE TIER LIMIT: This feature requires a paid Token Metrics plan. Your current plan doesn't support this analysis. Error: ${msg}`;
+        errorType = "tier_limit";
+      }
+
       const errorResult: ActionResult = {
-        text: `Failed to fetch token analysis: ${msg}`,
+        text: userFriendlyMessage,
         success: false,
         error: msg,
+        data: {
+          errorType,
+          isRateLimit,
+          isAuthError,
+          originalError: msg,
+        },
       };
 
       if (callback) {
         await callback({
           text: errorResult.text,
-          content: { error: "action_failed", details: msg },
+          content: {
+            error: errorType,
+            details: msg,
+            isRateLimit,
+            isAuthError,
+            userMessage: userFriendlyMessage,
+          },
         });
       }
       return errorResult;

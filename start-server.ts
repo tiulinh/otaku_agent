@@ -10,6 +10,57 @@ import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
+// ============================================================
+// LOG FILTERING: Only show Token Metrics plugin logs
+// ============================================================
+const originalConsoleLog = console.log;
+const originalConsoleError = console.error;
+const originalConsoleWarn = console.warn;
+const originalConsoleInfo = console.info;
+
+// Only show logs containing these keywords
+const ALLOWED_KEYWORDS = [
+  'Token Metrics',
+  'TokenMetrics',
+  'TOKEN_METRICS',
+  'GET_TRADING_SIGNALS',
+  'GET_TOKEN_ANALYSIS',
+  'tmai-api',
+  'Loading project from:', // Keep startup message
+  'Started', // Keep startup message
+  'Server with custom UI', // Keep startup message
+];
+
+function shouldShowLog(args: any[]): boolean {
+  const text = args.join(' ');
+  return ALLOWED_KEYWORDS.some(keyword => text.includes(keyword));
+}
+
+// Override console methods to filter logs
+console.log = (...args: any[]) => {
+  if (shouldShowLog(args)) {
+    originalConsoleLog(...args);
+  }
+};
+
+console.info = (...args: any[]) => {
+  if (shouldShowLog(args)) {
+    originalConsoleInfo(...args);
+  }
+};
+
+console.warn = (...args: any[]) => {
+  if (shouldShowLog(args)) {
+    originalConsoleWarn(...args);
+  }
+};
+
+console.error = (...args: any[]) => {
+  if (shouldShowLog(args)) {
+    originalConsoleError(...args);
+  }
+};
+
 async function main() {
   const server = new AgentServer();
 

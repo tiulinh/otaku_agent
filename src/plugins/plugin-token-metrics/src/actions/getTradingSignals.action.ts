@@ -19,7 +19,6 @@ async function fetchTradingSignals(symbols: string[], apiKey: string): Promise<T
   try {
     // Initialize Token Metrics client
     const client = new TokenMetricsClient(apiKey);
-    console.log(`[Token Metrics] Fetching data for: ${symbols.join(", ")}`);
 
     // Get token data (includes price, market cap, volume, etc.)
     const tokensResult = await client.tokens.get({ symbol: symbols.join(",") });
@@ -27,8 +26,6 @@ async function fetchTradingSignals(symbols: string[], apiKey: string): Promise<T
     if (!tokensResult.success || !tokensResult.data || tokensResult.data.length === 0) {
       throw new Error("No data returned from Token Metrics API");
     }
-
-    console.log(`[Token Metrics] ✅ Retrieved ${tokensResult.data.length} tokens`);
 
     // Get price data for more accuracy - use LATEST price only
     const priceResult = await client.price.get({ symbol: symbols.join(",") });
@@ -51,7 +48,6 @@ async function fetchTradingSignals(symbols: string[], apiKey: string): Promise<T
         const latestPrice = sortedPrices.find(p => p.current_price !== null && p.current_price !== undefined);
         if (latestPrice) {
           priceMap.set(tokenId, latestPrice.current_price);
-          console.log(`[Token Metrics] Using latest price for token_id ${tokenId}: $${latestPrice.current_price} (${latestPrice.timestamp.split('T')[0]})`);
         }
       });
     }
@@ -60,6 +56,11 @@ async function fetchTradingSignals(symbols: string[], apiKey: string): Promise<T
     // Token Metrics API returns multiple tokens with same symbol (e.g., 10+ "BTC" tokens)
     const symbolToTokenMap = new Map<string, any>();
     tokensResult.data.forEach((token: any) => {
+      // Skip tokens without symbol
+      if (!token.token_symbol) {
+        return;
+      }
+
       const symbol = token.token_symbol.toUpperCase();
       const existing = symbolToTokenMap.get(symbol);
 
@@ -70,10 +71,6 @@ async function fetchTradingSignals(symbols: string[], apiKey: string): Promise<T
     });
 
     const filteredTokens = Array.from(symbolToTokenMap.values());
-    console.log(`[Token Metrics] Filtered ${tokensResult.data.length} tokens → ${filteredTokens.length} unique (highest market cap)`);
-    filteredTokens.forEach((t: any) => {
-      console.log(`[Token Metrics] - ${t.token_symbol}: ${t.token_name} (token_id: ${t.token_id}, market_cap: $${((t.market_cap || 0) / 1e9).toFixed(2)}B)`);
-    });
 
     // Try to get resistance/support levels and price predictions (may require paid tier)
     const resistanceSupportMap = new Map();
@@ -81,25 +78,22 @@ async function fetchTradingSignals(symbols: string[], apiKey: string): Promise<T
 
     for (const symbol of symbols) {
       try {
-        console.log(`[Token Metrics] Fetching resistanceSupport for ${symbol}...`);
         const rsResult = await client.resistanceSupport.get({ symbol });
         if (rsResult.success && rsResult.data && rsResult.data.length > 0) {
           resistanceSupportMap.set(symbol.toUpperCase(), rsResult.data[0]);
-          console.log(`[Token Metrics] ✅ resistanceSupport for ${symbol}: Support=${rsResult.data[0].support}, Resistance=${rsResult.data[0].resistance}`);
         }
       } catch (err) {
-        console.log(`[Token Metrics] ⚠️ resistanceSupport for ${symbol} unavailable (${err instanceof Error ? err.message : String(err)})`);
+        // Silently skip if unavailable
       }
 
       try {
-        console.log(`[Token Metrics] Fetching pricePrediction for ${symbol}...`);
+        // @ts-ignore - pricePrediction endpoint exists in tmai-api v3.3.0
         const ppResult = await client.pricePrediction.get({ symbol });
         if (ppResult.success && ppResult.data && ppResult.data.length > 0) {
           pricePredictionMap.set(symbol.toUpperCase(), ppResult.data[0]);
-          console.log(`[Token Metrics] ✅ pricePrediction for ${symbol}: ${ppResult.data[0].predicted_price}`);
         }
       } catch (err) {
-        console.log(`[Token Metrics] ⚠️ pricePrediction for ${symbol} unavailable (${err instanceof Error ? err.message : String(err)})`);
+        // Silently skip if unavailable
       }
     }
 
@@ -111,8 +105,9 @@ async function fetchTradingSignals(symbols: string[], apiKey: string): Promise<T
       const volume24h = token.total_volume || 0;
 
       // Get resistance/support and price prediction data (if available - PAID tier only)
-      const rsData = resistanceSupportMap.get(token.token_symbol.toUpperCase());
-      const ppData = pricePredictionMap.get(token.token_symbol.toUpperCase());
+      const tokenSymbol = (token.token_symbol || "").toUpperCase();
+      const rsData = resistanceSupportMap.get(tokenSymbol);
+      const ppData = pricePredictionMap.get(tokenSymbol);
 
       // Generate signal - use AI price prediction (PAID tier) or show warning (FREE tier)
       let signal: "BUY" | "SELL" | "HOLD";
@@ -130,12 +125,10 @@ async function fetchTradingSignals(symbols: string[], apiKey: string): Promise<T
           signal = "HOLD";
           signalSource = `AI prediction (equal price)`;
         }
-        console.log(`[Token Metrics] ${token.token_symbol} signal: ${signal} from ${signalSource}`);
       } else {
         // FREE tier: Cannot predict without pricePrediction API
         signal = "HOLD";
         signalSource = "FREE tier - upgrade to get BUY/SELL signals";
-        console.log(`[Token Metrics] ⚠️ ${token.token_symbol}: ${signalSource}`);
       }
 
       // Calculate confidence from market data
@@ -153,7 +146,6 @@ async function fetchTradingSignals(symbols: string[], apiKey: string): Promise<T
         // Use resistance/support from Token Metrics API
         targetPrice = signal === "BUY" ? rsData.resistance : rsData.support;
         stopLoss = signal === "BUY" ? rsData.support : rsData.resistance;
-        console.log(`[Token Metrics] Using resistanceSupport for ${token.token_symbol}: Target=$${targetPrice}, Stop=$${stopLoss}`);
       } else {
         // Fallback to volatility-based calculation
         // If price change data is unavailable (free tier), use 2% default volatility
@@ -161,15 +153,12 @@ async function fetchTradingSignals(symbols: string[], apiKey: string): Promise<T
         const volatility = priceChange24h !== 0 ? Math.abs(priceChange24h) / 100 : defaultVolatility;
         targetPrice = currentPrice * (signal === "BUY" ? 1 + volatility * 1.5 : 1 - volatility * 1.2);
         stopLoss = currentPrice * (signal === "BUY" ? 1 - volatility * 0.8 : 1 + volatility * 0.8);
-        console.log(`[Token Metrics] Using volatility-based calculation for ${token.token_symbol} (volatility: ${(volatility * 100).toFixed(2)}%)`);
       }
 
       // Add price prediction if available
       if (ppData && ppData.predicted_price) {
         predictionInfo = ` | Predicted: $${ppData.predicted_price >= 1 ? ppData.predicted_price.toFixed(2) : ppData.predicted_price.toFixed(6)}`;
       }
-
-      console.log(`[Token Metrics] ${token.token_symbol}: ${signal} at $${currentPrice.toFixed(2)} (${priceChange24h >= 0 ? '+' : ''}${priceChange24h.toFixed(2)}%)`);
 
       // Build reasoning text
       let reasoning = `Token Metrics: ${token.token_name} @ $${currentPrice >= 1 ? currentPrice.toFixed(2) : currentPrice.toFixed(6)} | 24h: ${priceChange24h >= 0 ? '+' : ''}${priceChange24h.toFixed(2)}% | Vol: $${(volume24h / 1e6).toFixed(1)}M | MCap: $${(marketCap / 1e9).toFixed(2)}B${predictionInfo}`;
@@ -180,7 +169,7 @@ async function fetchTradingSignals(symbols: string[], apiKey: string): Promise<T
       }
 
       return {
-        symbol: token.token_symbol.toUpperCase(),
+        symbol: tokenSymbol,
         signal: signal,
         entryPrice: currentPrice,
         targetPrice: targetPrice,
@@ -319,16 +308,57 @@ export const getTradingSignalsAction: Action = {
       const msg = error instanceof Error ? error.message : String(error);
       logger.error(`[GET_TRADING_SIGNALS] Action failed: ${msg}`);
 
+      // Detect rate limit errors
+      const isRateLimit =
+        msg.toLowerCase().includes('rate limit') ||
+        msg.toLowerCase().includes('429') ||
+        msg.toLowerCase().includes('too many requests') ||
+        msg.toLowerCase().includes('quota exceeded');
+
+      // Detect authentication/API key errors
+      const isAuthError =
+        msg.toLowerCase().includes('401') ||
+        msg.toLowerCase().includes('403') ||
+        msg.toLowerCase().includes('unauthorized') ||
+        msg.toLowerCase().includes('api key') ||
+        msg.toLowerCase().includes('authentication');
+
+      let userFriendlyMessage = `Failed to fetch trading signals: ${msg}`;
+      let errorType = "action_failed";
+
+      if (isRateLimit) {
+        userFriendlyMessage = `🚨 RATE LIMIT: Token Metrics API has hit its rate limit. Please wait a few minutes or upgrade your Token Metrics plan. Error: ${msg}`;
+        errorType = "rate_limit";
+      } else if (isAuthError) {
+        userFriendlyMessage = `🔑 AUTH ERROR: Token Metrics API key is invalid or unauthorized. Please check your TOKENMETRICS_API_KEY in .env file. Error: ${msg}`;
+        errorType = "auth_error";
+      } else if (msg.toLowerCase().includes('free tier') || msg.toLowerCase().includes('upgrade')) {
+        userFriendlyMessage = `⚠️ FREE TIER LIMIT: This feature requires a paid Token Metrics plan. Your current plan doesn't support trading signals. Error: ${msg}`;
+        errorType = "tier_limit";
+      }
+
       const errorResult: ActionResult = {
-        text: `Failed to fetch trading signals: ${msg}`,
+        text: userFriendlyMessage,
         success: false,
         error: msg,
+        data: {
+          errorType,
+          isRateLimit,
+          isAuthError,
+          originalError: msg,
+        },
       };
 
       if (callback) {
         await callback({
           text: errorResult.text,
-          content: { error: "action_failed", details: msg },
+          content: {
+            error: errorType,
+            details: msg,
+            isRateLimit,
+            isAuthError,
+            userMessage: userFriendlyMessage,
+          },
         });
       }
       return errorResult;
